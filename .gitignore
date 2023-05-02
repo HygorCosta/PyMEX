@@ -1,0 +1,14 @@
+# Git ignore
+reservoir_tpl/
+build/
+dist/
+pymex_npv.egg-info/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+.vscode/
+.pytest_cache
+out/
+.venv/
+*.csv

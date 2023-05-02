@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "res-pymex"
+version = "0.1.0"
+description = ""
+authors = ["HYGOR VINICIUS COSTA SILVA <hygorvcosta@gmail.com>"]
+readme = "README.md"
+packages = [{include = "res_pymex"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pandas = "^2.0.1"
+numpy = "^1.24.3"
+pyyaml = "^6.0"
+pytest = "^7.3.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
