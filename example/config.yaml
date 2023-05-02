@@ -1,0 +1,38 @@
+# CMG softwars paths
+cmg_exe_path: 'C:\Program Files\CMG\IMEX\2022.10\Win_x64\EXE\mx202210.exe'
+cmg_results_path: 'C:\Program Files\CMG\RESULTS\2022.10\Win_x64\exe\Report.exe'
+
+# Reservoir information paths
+# if there is INCLUDE files, it have been put in the temp_run
+path: 'reservoir_tpl\Pituba' # main folder, all three below are inside this
+run_folder: 'temp_run'
+tpl_report: 'TemplateReport.tpl' # tpl file for report result
+tpl: 'Pituba.tpl' # tpl file to replace cronograma <PyMEX>alter_wells</PyMEX>
+
+# Options
+clean_up_results: True # delete all temporary files
+evaluate_npv: True # calculate net present value
+
+# Cronograma modify or time linspace
+change_cronograma_file: True # False if time_concession explicit in days
+cronograma: 'Cronograma_Base.inc' # if change_cronograma_file is true
+time_concession: False # False is change_cronograma_file is True, otherwise number of days
+
+# Convertion unities
+vol_m3_to_bbl: True
+gas_to_oil_equiv: True
+
+## Reservoir operation settings
+prices: [70, -2, -2, -2] # oil, gas, water_prod, water_inj (+revenue, -cost)
+tma: 0.1 # a.a
+nb_cycles: 2 #number of cycles
+nb_prod: 15 #number of producers
+nb_inj: 14 #number of injectors
+max_rate_prod: 2000 # int or float or list
+min_rate_prod: 0 # minimum production rate by well
+max_rate_inj: [2400, 2400, 900, 1200, 1200, 2400, 2400, 2400, 2400, 1200, 2400, 2400, 2400, 2400]
+min_rate_prod: 0 # minimum injection rate by well
+max_plat_prod: 15898.73 # max liquid prodution rate platform
+max_plat_inj: 18000 # max liquid injection rate platform
+type_opera: 1 # full capacity = 0, non full capacity = 1
+type_time: 0 # time is not a variable = 0, time is a variable = 1
