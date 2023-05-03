@@ -11,31 +11,22 @@
 # Created: Jul 2019
 # Author: Hygor Costa
 """
-import re
-import pandas as pd
-import multiprocessing as mp
-from string import Template
 import os
-from sys import platform
+import re
 import subprocess
 from pathlib import Path
+from string import Template
+
 import numpy as np
+import pandas as pd
+
 from .imex_tools import ImexTools
-
-
-def my_pid():
-    """Returns the relative pid of a pool
-    process."""
-    cur_proc = mp.current_process()
-    if cur_proc._identity:
-        return cur_proc._identity[0]
-    return 0
 
 
 def create_name():
     """Create dat name for parallel
     run."""
-    return f"rank{my_pid()}"
+    return f"rank{os.getpid()}"
 
 
 class PyMEX(ImexTools):
@@ -101,7 +92,7 @@ class PyMEX(ImexTools):
         """Replace control tag <PyMEX>alter_wells</PyMEX>
         in cronograma_file.
         """
-        with open(self.cronograma, "r+") as file:
+        with open(self.cronograma, "r+", encoding='UTF-8') as file:
             content = file.read()
             pattern = re.compile(r"<PyMEX>alter_wells</PyMEX>")
             controls = self._wells_alter_strings()
@@ -165,7 +156,8 @@ class PyMEX(ImexTools):
         if type_opera == 0:  # full_capacity
             self.full_capacity()
 
-        with open(self.tpl, "r") as tpl, open(self.basename.dat, "w") as dat:
+        with open(self.tpl, "r", encoding='UTF-8') as tpl,\
+              open(self.basename.dat, "w", encoding='UTF-8') as dat:
             template_content = tpl.read()
             if self.controls is not None:
                 operation_content = self.include_operation()
@@ -176,7 +168,8 @@ class PyMEX(ImexTools):
     def rwd_file(self):
         """create *.rwd (output conditions) from report.tmpl."""
         tpl_report = Path(self.res_param["path"]) / self.res_param["tpl_report"]
-        with open(tpl_report, "r") as tmpl, open(self.basename.rwd, "w") as rwd:
+        with open(tpl_report, "r", encoding='UTF-8') as tmpl, \
+             open(self.basename.rwd, "w", encoding='UTF-8') as rwd:
             tpl = Template(tmpl.read())
             content = tpl.substitute(SR3FILE=self.basename.sr3.name)
             rwd.write(content)
@@ -185,14 +178,8 @@ class PyMEX(ImexTools):
         """call IMEX + Results Report."""
         # environ['CMG_HOME'] = '/cmg'
 
-        with open(self.basename.log, "w") as log:
-            if platform == 'linux':
-                path = ["/cmg/RunSim.sh",
-                        "imex",
-                        "2018.10",
-                        self.basename.dat]
-            elif platform == 'win32':
-                path = [self.res_param['cmg_exe_path'], '-f', self.basename.dat.name]
+        with open(self.basename.log, 'w', encoding='UTF-8') as log:
+            path = [self.res_param['cmg_exe_path'], '-f', self.basename.dat.name]
             procedure = subprocess.run(path, stdout=log, cwd=self.run_path, check=True, shell=True)
             self.run_report_results(procedure)
 
@@ -213,7 +200,7 @@ class PyMEX(ImexTools):
                 shell=True
             )
             try:
-                with open(self.basename.rwo, 'r+') as rwo:
+                with open(self.basename.rwo, 'r+', encoding='UTF-8') as rwo:
                     self.prod = pd.read_csv(rwo, sep="\t", index_col=False, usecols=np.r_[:6], skiprows=np.r_[0,1,3:6])
                     self.prod = self.prod.rename(
                         columns={
@@ -239,10 +226,19 @@ class PyMEX(ImexTools):
 
     def restore_run(self):
         """Restart the IMEX run."""
-        with open(self.basename["rwo"]) as rwo:
+        with open(self.basename.rwo, 'r+', encoding='UTF-8') as rwo:
             self.prod = pd.read_csv(rwo, sep="\t", index_col=False, header=6)
-        self.prod = self.prod.dropna(axis=1, how="all")
-        self._colum_names()
+            self.prod = self.prod.dropna(axis=1, how="all")
+            self.prod = self.prod.rename(
+                columns={
+                        'TIME': 'time',
+                        'Period Oil Production - Monthly SC': "oil_prod",
+                        'Period Gas Production - Monthly SC': "gas_prod",
+                        'Period Water Production - Monthly SC': "water_prod",
+                        'Period Water Production - Monthly SC.1': "water_inj",
+                        'Liquid Rate SC': "liq_prod"
+                }
+            )
 
     def cash_flow(self):
         """Return the cash flow from production."""
