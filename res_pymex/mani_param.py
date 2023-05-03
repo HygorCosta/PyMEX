@@ -174,19 +174,50 @@ class PyMEX(ImexTools):
             content = tpl.substitute(SR3FILE=self.basename.sr3.name)
             rwd.write(content)
 
+    def get_cmg_run_path(self, pattern: str):
+        """Search the IMEX executable.
+
+        Returns:
+            Path: Path istance
+        """
+        try :
+            cmg_home = os.environ['CMG_HOME']
+            paths = list(Path(cmg_home).rglob(pattern))
+            return paths[-1]
+        except KeyError:
+            print('Verifique se a variável de ambiente CMG_HOME existe!')
+
     def run_imex(self):
         """call IMEX + Results Report."""
-        # environ['CMG_HOME'] = '/cmg'
-
         with open(self.basename.log, 'w', encoding='UTF-8') as log:
-            path = [self.res_param['cmg_exe_path'], '-f', self.basename.dat.name]
+            path = [self.get_cmg_run_path('mx20*.exe'), '-f', self.basename.dat.name]
             procedure = subprocess.run(path, stdout=log, cwd=self.run_path, check=True, shell=True)
-            self.run_report_results(procedure)
+        return procedure
+
+    def read_rwo_file(self):
+        """Read output file (rwo) and build the production dataframe."""
+        with open(self.basename.rwo, 'r+', encoding='UTF-8') as rwo:
+            self.prod = pd.read_csv(rwo, sep="\t", index_col=False,\
+                                     usecols=np.r_[:6], skiprows=np.r_[0,1,3:6])
+            self.prod = self.prod.rename(
+                columns={
+                        'TIME': 'time',
+                        'Period Oil Production - Monthly SC': "oil_prod",
+                        'Period Gas Production - Monthly SC': "gas_prod",
+                        'Period Water Production - Monthly SC': "water_prod",
+                        'Period Water Production - Monthly SC.1': "water_inj",
+                        'Liquid Rate SC': "liq_prod"
+                }
+            )
+            if self.res_param['vol_m3_to_bbl']:
+                self.prod.loc[:, self.prod.columns != 'time'] *= 6.29
+            if self.res_param['gas_to_oil_equiv']:
+                self.prod.gas_prod /= 1017.045686
 
     def run_report_results(self, procedure):
         """Get production for results."""
         if procedure.returncode == 0:
-            path_results = [self.res_param['cmg_results_path'],
+            path_results = [self.get_cmg_run_path('Report.exe'),
                             '-f',
                             self.basename.rwd.name,
                             '-o',
@@ -200,22 +231,7 @@ class PyMEX(ImexTools):
                 shell=True
             )
             try:
-                with open(self.basename.rwo, 'r+', encoding='UTF-8') as rwo:
-                    self.prod = pd.read_csv(rwo, sep="\t", index_col=False, usecols=np.r_[:6], skiprows=np.r_[0,1,3:6])
-                    self.prod = self.prod.rename(
-                        columns={
-                                'TIME': 'time',
-                                'Period Oil Production - Monthly SC': "oil_prod",
-                                'Period Gas Production - Monthly SC': "gas_prod",
-                                'Period Water Production - Monthly SC': "water_prod",
-                                'Period Water Production - Monthly SC.1': "water_inj",
-                                'Liquid Rate SC': "liq_prod"
-                        }
-                    )
-                    if self.res_param['vol_m3_to_bbl']:
-                        self.prod.loc[:, self.prod.columns != 'time'] *= 6.29
-                    if self.res_param['gas_to_oil_equiv']:
-                        self.prod.gas_prod /= 1017.045686
+                self.read_rwo_file()
             except StopIteration as err:
                 print("StopIteration error: Failed in Imex run.")
                 print(f"Verify {self.basename.log}")
@@ -279,11 +295,11 @@ class PyMEX(ImexTools):
             self.rwd_file()
 
             # Run Imex + Results Report
-            self.run_imex()
+            procedure = self.run_imex()
+            self.run_report_results(procedure)
 
             # Evaluate the net present value
-            if self.res_param["evaluate_npv"]:
-                self.npv = self.net_present_value()
+            self.npv = self.net_present_value()
 
             # Remove all files create in Run Imex
             if self.res_param['clean_up_results']:
