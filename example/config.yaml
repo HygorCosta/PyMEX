@@ -1,6 +1,4 @@
-# CMG softwars paths
-cmg_exe_path: 'C:\Program Files\CMG\IMEX\2022.10\Win_x64\EXE\mx202210.exe'
-cmg_results_path: 'C:\Program Files\CMG\RESULTS\2022.10\Win_x64\exe\Report.exe'
+## PyMEX config file
 
 # Reservoir information paths
 # if there is INCLUDE files, it have been put in the temp_run
@@ -11,7 +9,7 @@ tpl: 'Pituba.tpl' # tpl file to replace cronograma <PyMEX>alter_wells</PyMEX>
 
 # Options
 clean_up_results: True # delete all temporary files
-evaluate_npv: True # calculate net present value
+# evaluate_npv: True # calculate net present value
 
 # Cronograma modify or time linspace
 change_cronograma_file: True # False if time_concession explicit in days
