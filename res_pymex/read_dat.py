@@ -19,8 +19,7 @@ class ReadDatFile:
         self.reservoir_tpl = Path(reservoir_dat)
         self.max_plat_prod = self.read_group_controls('prod', 'STL')
         self.max_plat_inj = self.read_group_controls('inj', 'STW')
-        self.prod_primary_const = self.get_constraint(rel_path='INCLUDE/Produtores.inc', group='primary')
-        self.inj_primary_const = self.get_constraint(rel_path='INCLUDE/Injetores.inc', group='primary')
+        self.info_wells = self.get_wells_info()
 
     @staticmethod
     def _check_well_type(well_type: str):
@@ -84,15 +83,47 @@ class ReadDatFile:
             df['well'] = np.repeat(wells_alias, 2)
         return df[['well', 'const_order', 'operate', 'const_type', 'value']]
 
-    def get_constraint(self, rel_path: str, group: str):
+    def get_constraint(self, well_type: str, group: str):
         """Get constraint from producers.
 
         Args:
+            well_type (str): 'prod' for producers and 'inj' for injectores
             group (str): select the constraint group from 'primary' or 'secondary'
 
         Returns:
             nd.array: with the same length of wells
         """
-        wells_const = self.read_wells_include_file(rel_path)
-        const_grouped = wells_const.groupby('const_order')
+        well_group = self.info_wells.groupby('well_type').get_group(well_type)
+        const_grouped = well_group.groupby('const_order')
         return const_grouped.get_group(group)['value'].astype(float).to_numpy()
+
+    def get_wells_info(self):
+        """Dataframe with wells information."""
+        prod_info = self.read_wells_include_file(
+            rel_path='INCLUDE/Produtores.inc')
+        prod_info['well_type'] = 'prod'
+        inj_info = self.read_wells_include_file(
+            rel_path='INCLUDE/Injetores.inc')
+        inj_info['well_type'] = 'inj'
+        return pd.concat([prod_info, inj_info], ignore_index=True)
+
+    @property
+    def num_producers(self):
+        """Number of well producers"""
+        producers = self.info_wells.groupby('well_type').get_group('prod')
+        return producers['well'].nunique()
+
+    @property
+    def num_injectors(self):
+        """Number of well injectors"""
+        injectors =  self.info_wells.groupby('well_type').get_group('inj')
+        return injectors['well'].nunique()
+
+    @property
+    def num_wells(self):
+        """Total number of wells"""
+        return self.info_wells['well'].nunique()
+
+    def get_well_aliases(self):
+        """Sequence alias order for well producers and injetors."""
+        return self.info_wells['well'].unique()
