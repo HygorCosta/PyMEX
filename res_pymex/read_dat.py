@@ -2,6 +2,9 @@
 import re
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 
 class ReadDatFile:
     """Class to read the data file and extract reservoir
@@ -14,14 +17,18 @@ class ReadDatFile:
 
     def __init__(self, reservoir_dat) -> None:
         self.reservoir_tpl = Path(reservoir_dat)
+        self.max_plat_prod = self.read_group_controls('prod', 'STL')
+        self.max_plat_inj = self.read_group_controls('inj', 'STW')
+        self.prod_primary_const = self.get_constraint(rel_path='INCLUDE/Produtores.inc', group='primary')
+        self.inj_primary_const = self.get_constraint(rel_path='INCLUDE/Injetores.inc', group='primary')
 
     @staticmethod
     def _check_well_type(well_type: str):
         """Convert well type input"""
         group = None
-        if well_type.lower()=='inj':
+        if well_type.lower() == 'inj':
             group = 'GCONI'
-        elif well_type.lower()=='prod':
+        elif well_type.lower() == 'prod':
             group = 'GCONP'
         else:
             raise ValueError('Well type inj or prod')
@@ -40,17 +47,52 @@ class ReadDatFile:
         Examples:
             >>> self.read_group_controls('inj', 'STW')
             18000.0
-            >>> self.read_group_controls('prod', 'STL')
+            >>> self.read_group_controls('prod', 'stl')
             15830.73
 
         """
         with open(self.reservoir_tpl, 'r+', encoding='UTF-8') as file:
             dat = file.read()
             group = self._check_well_type(well_type)
-            pattern = fr'{group}[\s\S]+?MAX\s+{const_type}\s+(\d+\.?\d+)'
+            pattern = fr'^{group}[\s\S]+?MAX\s+{const_type.upper()}\s+(\d+(?:\.\d+)?)'
             max_plat = re.findall(pattern, dat, flags=re.M)
             if len(max_plat):
                 max_plat = float(max_plat[0])
             else:
                 max_plat = None
         return max_plat
+
+    def read_wells_include_file(self, rel_path: str):
+        """Read include wells files.
+
+        Args:
+            rel_path (str): relative path to injectors ou producers include wells.
+
+        Returns:
+            pd.Dataframa: nome do poço, ordem de restrição, propriedade de operação, tipo de restrição (min|max) e valor
+        """
+        producers_inc = self.reservoir_tpl.parent / rel_path
+        with open(producers_inc, 'r+', encoding='UTF-8') as file:
+            producers = file.read()
+            well_pattern = r'^WELL\s+\'(\w+)\''
+            operate_pattern = r'^OPERATE?\s+(MAX|MIN)\s+(STL|BHP|STO|STW).+?(\d+(?:\.\d+)?)\s+CONT$'
+            wells_alias = re.findall(well_pattern, producers, flags=re.M)
+            constraints = re.findall(operate_pattern, producers, flags=re.M)
+            df = pd.DataFrame(constraints, columns=[
+                              'const_type', 'operate', 'value'])
+            df['const_order'] = np.where(df.index % 2, 'secondary', 'primary')
+            df['well'] = np.repeat(wells_alias, 2)
+        return df[['well', 'const_order', 'operate', 'const_type', 'value']]
+
+    def get_constraint(self, rel_path: str, group: str):
+        """Get constraint from producers.
+
+        Args:
+            group (str): select the constraint group from 'primary' or 'secondary'
+
+        Returns:
+            nd.array: with the same length of wells
+        """
+        wells_const = self.read_wells_include_file(rel_path)
+        const_grouped = wells_const.groupby('const_order')
+        return const_grouped.get_group(group)['value'].astype(float).to_numpy()
