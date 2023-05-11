@@ -1,5 +1,6 @@
 from res_pymex import ImexTools
 
+
 def create_instance():
     controls = [1] * 58
     return ImexTools(controls, 'example/config.yaml')

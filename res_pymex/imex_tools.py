@@ -12,17 +12,29 @@
 # Author: Hygor Costa
 """
 
+import multiprocessing as mp
+import re
 from collections import namedtuple
-import yaml
 from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 
 class ImexTools:
-    """Create tools for simulate the value of the well_controls in
-    IMEX."""
+    """Create tools to simulate the value of the well_controls in
+    IMEX.
 
-    def __init__(self, well_controls, config_file):
+    Input:
+    - reservoir_tpl(str): path to reservoir tpl file
+    - well_controls(np.array): unitary controls of each variable
+        np.array([0, 1, 1, 1, 0.5, 0.5, 0.6])  - 7 variables
+    - num_wells(np.array): number of wells
+        np.array([num_producers, num_injectors]) - np.array([4, 3])
+    - max_well_rate(np.array): maximum well rate of each well
+    """
+
+    def __init__(self, reservoir_dat):
         """
         Parameters
         ----------
@@ -31,51 +43,19 @@ class ImexTools:
         res_param: dictionary
             Reservoir parameters.
         """
-        self.controls = np.array(well_controls)
-        self.res_param = self._read_config_file(config_file)
-        self.run_path = self._set_paths("run_folder")
-        self.tpl = self._set_paths("tpl")
-        if well_controls:
-            self.modif_controls = self.multiply_variables()
-        if self.res_param["change_cronograma_file"]:
-            self.cronograma = self._set_paths("cronograma")
-
-    def _read_config_file(self, config_file):
-        with open(config_file) as file:
-            res_param = yaml.load(file, Loader=yaml.FullLoader)
-        return res_param
-
-    def _set_paths(self, folder_name: str):
-        path = Path(self.res_param["path"])
-        return path / self.res_param[folder_name]
+        self.reservoir_tpl = Path(reservoir_dat)
+        self.run_path = self.reservoir_tpl.parent / 'temp_run'
+        self.cronograma = self.reservoir_tpl.parent / 'INCLUDE/Cronograma.inc'
+        self.max_plat_prod = self.read_group_controls('prod', 'STL')
+        self.max_plat_inj = self.read_group_controls('inj', 'STW')
+        self.info_wells = self.get_wells_info()
+        self.basename = self.cmgfile(f'{self.reservoir_tpl.stem}_{mp.current_process().name}')
 
     def well_rate_max(self):
         """Get the maximum rate."""
-        produtor = self._well_bounds_rate(well='prod')
-        injetor = self._well_bounds_rate(well='inj')
-        return np.concatenate((produtor, injetor))
-
-    def _well_bounds_rate(self, well:str):
-        """Get wells bounds rate
-
-        Args:
-            well (str): 'prod' for producers and 'inj' for injectors
-
-        Returns:
-            np.array: shape(nwells, 1)
-        """
-        well_rate = None
-        if well == 'prod':
-            bound = self.res_param['max_rate_prod']
-            nwells = self.res_param['nb_prod']
-        elif well == 'inj':
-            bound = self.res_param['max_rate_inj']
-            nwells = self.res_param['nb_inj']            
-        if isinstance(bound, list) and len(bound) == nwells:
-            well_rate = np.array(bound)
-        elif isinstance(bound, (int, float)):
-            well_rate = np.repeat(bound, nwells)
-        return well_rate
+        prod_max = self.get_constraint('prod', 'primary')
+        inj_max = self.get_constraint('inj', 'primary')
+        return np.concatenate((prod_max, inj_max))
 
     def cmgfile(self, basename):
         """
@@ -100,37 +80,117 @@ class ImexTools:
             basename.with_suffix(".sr3"),
         )
         return basename
-    
-    def check_minimum_well_rate(self, controles):
-        pass
 
-    def multiply_variables(self):
+    def scale_variables(self, controls):
         """Transform the design variables."""
-        controls_per_cycle = np.split(self.controls, self.res_param["nb_cycles"])
+        num_cycles = len(controls) / self.num_wells
+        controls_per_cycle = np.split(controls, num_cycles)
         return [control * self.well_rate_max() for control in controls_per_cycle]
 
-    def time_steps(self):
-        """Manipulate the time variable to write in template"""
-        # Start cycle - Time ZERO:
-        time_type = self.res_param["type_time"]
-        nb_cycles = self.res_param["nb_cycles"]
-        time_conc = self.res_param["time_concession"]
-        time_steps = np.insert(self.modif_controls[-1], 0, 0)
-
-        if time_type == 1:  # time include as design variable
-            time_steps = np.cumsum(time_steps)
+    @staticmethod
+    def _check_well_type(well_type: str):
+        """Convert well type input"""
+        group = None
+        if well_type.lower() == 'inj':
+            group = 'GCONI'
+        elif well_type.lower() == 'prod':
+            group = 'GCONP'
         else:
-            time_steps = np.linspace(start=0, stop=time_conc, num=nb_cycles + 1)
-        return time_steps
+            raise ValueError('Well type inj or prod')
+        return group
 
-    def full_capacity(self):
-        """Determine the well ratio of the last well (prod or inj)"""
-        max_plat_prod = self.res_param["max_plat_prod"]
-        max_plat_inj = self.res_param["max_plat_inj"]
-        nb_prod = self.res_param["nb_prod"]
-        nb_inj = self.res_param["nb_inj"]
-        for index, control in enumerate(self.modif_controls):
-            last_prod_well = max_plat_prod - sum(control[:nb_prod])
-            last_inj_well = max_plat_inj - sum(control[nb_inj])
-            self.modif_controls[index].insert(nb_prod, last_prod_well)
-            self.modif_controls[index].append(last_inj_well)
+    def read_group_controls(self, well_type: str, const_type: str):
+        """Read group controls to platform production or injection constraints.
+
+        Args:
+            well_type (str): 'inj' for group of injector and 'prod' for group of producers
+            const_type (str): constraint type (STW and STL)
+
+        Returns:
+            float: maximum platform operation (injection or production) or None if is not specified
+
+        Examples:
+            >>> self.read_group_controls('inj', 'STW')
+            18000.0
+            >>> self.read_group_controls('prod', 'stl')
+            15830.73
+
+        """
+        with open(self.reservoir_tpl, 'r+', encoding='UTF-8') as file:
+            dat = file.read()
+            group = self._check_well_type(well_type)
+            pattern = fr'^{group}[\s\S]+?MAX\s+{const_type.upper()}\s+(\d+(?:\.\d+)?)'
+            max_plat = re.findall(pattern, dat, flags=re.M)
+            if len(max_plat):
+                max_plat = float(max_plat[0])
+            else:
+                max_plat = None
+        return max_plat
+
+    def read_wells_include_file(self, rel_path: str):
+        """Read include wells files.
+
+        Args:
+            rel_path (str): relative path to injectors ou producers include wells.
+
+        Returns:
+            pd.Dataframa: nome do poço, ordem de restrição, propriedade
+            de operação, tipo de restrição (min|max) e valor
+        """
+        producers_inc = self.reservoir_tpl.parent / rel_path
+        with open(producers_inc, 'r+', encoding='UTF-8') as file:
+            producers = file.read()
+            well_pattern = r'^WELL\s+\'(\w+)\''
+            operate_pattern = r'^OPERATE?\s+(MAX|MIN)\s+(STL|BHP|STO|STW).+?(\d+(?:\.\d+)?)\s+CONT$'
+            wells_alias = re.findall(well_pattern, producers, flags=re.M)
+            constraints = re.findall(operate_pattern, producers, flags=re.M)
+            df = pd.DataFrame(constraints, columns=[
+                              'const_type', 'operate', 'value'])
+            df['const_order'] = np.where(df.index % 2, 'secondary', 'primary')
+            df['well'] = np.repeat(wells_alias, 2)
+        return df[['well', 'const_order', 'operate', 'const_type', 'value']]
+
+    def get_constraint(self, well_type: str, group: str):
+        """Get constraint from producers.
+
+        Args:
+            well_type (str): 'prod' for producers and 'inj' for injectores
+            group (str): select the constraint group from 'primary' or 'secondary'
+
+        Returns:
+            nd.array: with the same length of wells
+        """
+        well_group = self.info_wells.groupby('well_type').get_group(well_type)
+        const_grouped = well_group.groupby('const_order')
+        return const_grouped.get_group(group)['value'].astype(float).to_numpy()
+
+    def get_wells_info(self):
+        """Dataframe with wells information."""
+        prod_info = self.read_wells_include_file(
+            rel_path='INCLUDE/Produtores.inc')
+        prod_info['well_type'] = 'prod'
+        inj_info = self.read_wells_include_file(
+            rel_path='INCLUDE/Injetores.inc')
+        inj_info['well_type'] = 'inj'
+        return pd.concat([prod_info, inj_info], ignore_index=True)
+
+    @property
+    def num_producers(self):
+        """Number of well producers"""
+        producers = self.info_wells.groupby('well_type').get_group('prod')
+        return producers['well'].nunique()
+
+    @property
+    def num_injectors(self):
+        """Number of well injectors"""
+        injectors = self.info_wells.groupby('well_type').get_group('inj')
+        return injectors['well'].nunique()
+
+    @property
+    def num_wells(self):
+        """Total number of wells"""
+        return self.info_wells['well'].nunique()
+
+    def get_well_aliases(self):
+        """Sequence alias order for well producers and injetors."""
+        return self.info_wells['well'].unique()
