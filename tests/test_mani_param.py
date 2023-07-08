@@ -15,7 +15,7 @@ def pymex():
     """Create instance of Pymex to test.
     """
     controls = [1] * 58
-    return PyMEX('reservoir_tpl/Pituba/Pituba.dat', controls)
+    return PyMEX('example/config_pituba.yaml', controls)
 
 def test_imex_run_path_is_correct_find(pymex_instance):
     """Verifica se o arquivo executável do IMEX foi 
@@ -94,3 +94,13 @@ def test_create_well_operation(pymex_instance):
     obtido = pymex_instance.npv(price, tma)
     assert obtido > 0
     assert isinstance(obtido, float)
+    
+
+def test_scaled_controls(pymex_instance):
+    assert len(pymex_instance.scaled_controls[0]) == 29
+    assert len(pymex_instance.scaled_controls) == 2
+    
+
+def test_run(pymex_instance):
+    obtido = pymex_instance.npv()
+    assert obtido != 0
