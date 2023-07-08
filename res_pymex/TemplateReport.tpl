@@ -1,19 +1,15 @@
-*FILE '$SR3FILE'  ** Nome do arquivo de entrada
+*FILES '$SR3FILE'
 *SPREADSHEET
-*TIME ON                 ** The tables will have no time column,
-*TABLE-FOR
-
-   *COLUMN-FOR  *GROUPS 'Plataforma-PRO'
+*NO-BLANKS
+*TIME ON
+*PRECISION 4
+*TABLE-FOR 
+   *COLUMN-FOR *GROUPS 'Field-PRO'
 				*PARAMETERS 'Period Oil Production - Monthly SC'
-   *COLUMN-FOR  *GROUPS 'Plataforma-PRO'
+   *COLUMN-FOR *GROUPS 'Field-PRO'
 				*PARAMETERS 'Period Gas Production - Monthly SC'
-   *COLUMN-FOR  *GROUPS 'Plataforma-PRO'
+   *COLUMN-FOR *GROUPS 'Field-PRO'
 				*PARAMETERS 'Period Water Production - Monthly SC'
-   *COLUMN-FOR  *GROUPS 'Plataforma-INJ'
+   *COLUMN-FOR *GROUPS 'Field-INJ'
 				*PARAMETERS 'Period Water Production - Monthly SC'
-   *COLUMN-FOR  *GROUPS 'Plataforma-PRO'
-				*PARAMETERS 'Liquid Rate SC'
-
 *TABLE-END
-
-** *LIST-PARAMETERS causes Results Report to list all the allowed parameters and origins for columns in a table (for first opened file).
