@@ -14,11 +14,13 @@
 
 import multiprocessing as mp
 import re
+import shutil
 from collections import namedtuple
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 
 
 class ImexTools:
@@ -34,7 +36,7 @@ class ImexTools:
     - max_well_rate(np.array): maximum well rate of each well
     """
 
-    def __init__(self, reservoir_dat):
+    def __init__(self, run_config):
         """
         Parameters
         ----------
@@ -43,20 +45,30 @@ class ImexTools:
         res_param: dictionary
             Reservoir parameters.
         """
-        self.reservoir_tpl = Path(reservoir_dat)
+        self.cfg = self.read_config_file(run_config)
+        self.reservoir_tpl = Path(self.cfg['tpl'])
         self.temp_run = self.reservoir_tpl.parent / 'temp_run'
-        self.cronograma = self.reservoir_tpl.parent / 'INCLUDE/Cronograma.inc'
-        self.max_plat_prod = self.read_group_controls('prod', 'STL')
-        self.max_plat_inj = self.read_group_controls('inj', 'STW')
+        self.basename = self.cmgfile()
+        self.schedule = self.inc_run_path / self.cfg['schedule']
+        self.max_plat_prod = self.cfg['max_plat_prod']
+        self.max_plat_inj = self.cfg['max_plat_inj']
         self.info_wells = self.get_wells_info()
         self.run_path = None
-        self.basename = self.cmgfile()
+
+    @staticmethod
+    def read_config_file(run_config):
+        """Read yaml file and convert to a dictionary."""
+        with open(run_config, "r", encoding='UTF-8') as yamlfile:
+            data = yaml.load(yamlfile, Loader=yaml.FullLoader)
+        return data
 
     def well_rate_max(self):
         """Get the maximum rate."""
-        prod_max = self.get_constraint('prod', 'primary')
-        inj_max = self.get_constraint('inj', 'primary')
-        return np.concatenate((prod_max, inj_max))
+        # prod_max = self.get_constraint('prod', 'primary')
+        # inj_max = self.get_constraint('inj', 'primary')
+        prod_max = self.cfg['max_rate_prod']
+        inj_max = self.cfg['max_rate_inj']
+        return np.array(prod_max + inj_max)
 
     def cmgfile(self):
         """
@@ -68,6 +80,9 @@ class ImexTools:
         basename = f'{self.reservoir_tpl.stem}_{mp.current_process().pid}'
         self.run_path = self.temp_run / basename
         self.run_path.mkdir(parents=True, exist_ok=False)
+        self.inc_run_path = self.run_path / self.cfg['inc_folder']
+        shutil.copytree(self.reservoir_tpl.parent / self.cfg['inc_folder'], 
+                        self.inc_run_path, dirs_exist_ok=True)
         basename = self.run_path / basename
         Extension = namedtuple(
             "Extension",
@@ -181,8 +196,9 @@ class ImexTools:
     @property
     def num_producers(self):
         """Number of well producers"""
-        producers = self.info_wells.groupby('well_type').get_group('prod')
-        return producers['well'].nunique()
+        # producers = self.info_wells.groupby('well_type').get_group('prod')
+        # return producers['well'].nunique()
+        return self.cfg['nb_prod']
 
     @property
     def num_injectors(self):
@@ -193,11 +209,13 @@ class ImexTools:
     @property
     def num_wells(self):
         """Total number of wells"""
-        return self.info_wells['well'].nunique()
+        # return self.info_wells['well'].nunique()
+        return self.cfg['nb_prod'] + self.cfg['nb_inj']
 
     def get_well_aliases(self):
         """Sequence alias order for well producers and injetors."""
-        return self.info_wells['well'].unique()
+        # return self.info_wells['well'].unique()
+        return self.cfg['prod_names'] + self.cfg['inj_names']
 
     def _parse_include_files(self, datafile):
         """Parse simulation file for *INCLUDE files and return a list."""
