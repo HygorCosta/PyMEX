@@ -44,12 +44,13 @@ class ImexTools:
             Reservoir parameters.
         """
         self.reservoir_tpl = Path(reservoir_dat)
-        self.run_path = self.reservoir_tpl.parent / 'temp_run'
+        self.temp_run = self.reservoir_tpl.parent / 'temp_run'
         self.cronograma = self.reservoir_tpl.parent / 'INCLUDE/Cronograma.inc'
         self.max_plat_prod = self.read_group_controls('prod', 'STL')
         self.max_plat_inj = self.read_group_controls('inj', 'STW')
         self.info_wells = self.get_wells_info()
-        self.basename = self.cmgfile(f'{self.reservoir_tpl.stem}_{mp.current_process().name}')
+        self.run_path = None
+        self.basename = self.cmgfile()
 
     def well_rate_max(self):
         """Get the maximum rate."""
@@ -57,13 +58,16 @@ class ImexTools:
         inj_max = self.get_constraint('inj', 'primary')
         return np.concatenate((prod_max, inj_max))
 
-    def cmgfile(self, basename):
+    def cmgfile(self):
         """
         A simple wrapper for retrieving CMG file extensions
         given the basename.
         :param basename:
         :return:
         """
+        basename = f'{self.reservoir_tpl.stem}_{mp.current_process().pid}'
+        self.run_path = self.temp_run / basename
+        self.run_path.mkdir(parents=True, exist_ok=False)
         basename = self.run_path / basename
         Extension = namedtuple(
             "Extension",
@@ -194,3 +198,19 @@ class ImexTools:
     def get_well_aliases(self):
         """Sequence alias order for well producers and injetors."""
         return self.info_wells['well'].unique()
+
+    def _parse_include_files(self, datafile):
+        """Parse simulation file for *INCLUDE files and return a list."""
+        with open(datafile, "r", encoding='UTF-8') as file:
+            lines = file.read()
+
+        pattern = r'\n\s*[*]?\s*include\s+[\'|"]([\.\w-])[\'|"]'
+        return re.findall(pattern, lines, flags=re.IGNORECASE)
+
+    # def copy_to(self):
+    #     """Copy simulation files to destination directory."""
+    #     src_files = [self.reservoir_tpl.parent / f for f in self._parse_include_files(self.reservoir_tpl)]
+    #     dst_files = [self.run_path / f for f in self._parse_include_files(self.reservoir_tpl)]
+    #     for src, dst in zip(src_files, dst_files):
+    #         dst.mkdir(parents=True, exist_ok=True)
+    #         shutil.copy(src, dst)

@@ -97,6 +97,7 @@ class PyMEX(ImexTools):
             tpl = Template(tmpl.read())
             content = tpl.substitute(SR3FILE=self.basename.sr3.name)
             rwd.write(content)
+        
 
     def get_cmg_run_path(self, pattern: str):
         """Search the IMEX executable.
@@ -120,7 +121,7 @@ class PyMEX(ImexTools):
                 imex_path = self.get_cmg_run_path('mx20*.exe')
                 path = [imex_path, '-f', self.basename.dat.name]
                 self.procedure = subprocess.run(
-                    path, stdout=log, cwd=self.run_path, check=True, shell=True)
+                    path, stdout=log, cwd=self.temp_run, check=True, shell=True)
         except subprocess.CalledProcessError as error:
             sys.exit(
                 f"Error - Não foi possível executar o IMEX, verificar: {error}")
@@ -157,7 +158,7 @@ class PyMEX(ImexTools):
                 path_results,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
-                cwd=self.run_path,
+                cwd=self.temp_run,
                 check=True,
                 shell=True
             )
@@ -204,7 +205,7 @@ class PyMEX(ImexTools):
         """
         if not self.restore_file:
             # Verify if the Run_Path exist
-            self.run_path.mkdir(parents=True, exist_ok=True)
+            self.temp_run.mkdir(parents=True, exist_ok=True)
             self.run_imex()
             self.run_report_results()
             self.read_rwo_file()
