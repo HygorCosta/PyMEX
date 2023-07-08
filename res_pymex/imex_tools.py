@@ -12,10 +12,10 @@
 # Author: Hygor Costa
 """
 
-from collections import namedtuple
-import yaml
 from pathlib import Path
+
 import numpy as np
+import yaml
 
 
 class ImexTools:
@@ -41,7 +41,7 @@ class ImexTools:
             self.cronograma = self._set_paths("cronograma")
 
     def _read_config_file(self, config_file):
-        with open(config_file) as file:
+        with open(config_file, "r", encoding='UTF-8') as file:
             res_param = yaml.load(file, Loader=yaml.FullLoader)
         return res_param
 
@@ -77,33 +77,7 @@ class ImexTools:
             well_rate = np.repeat(bound, nwells)
         return well_rate
 
-    def cmgfile(self, basename):
-        """
-        A simple wrapper for retrieving CMG file extensions
-        given the basename.
-        :param basename:
-        :return:
-        """
-        basename = self.run_path / basename
-        Extension = namedtuple(
-            "Extension",
-            "dat out irf mrf rwd rwo log sr3",
-        )
-        basename = Extension(
-            basename.with_suffix(".dat"),
-            basename.with_suffix(".out"),
-            basename.with_suffix(".irf"),
-            basename.with_suffix(".mrf"),
-            basename.with_suffix(".rwd"),
-            basename.with_suffix(".rwo"),
-            basename.with_suffix(".log"),
-            basename.with_suffix(".sr3"),
-        )
-        return basename
-    
-    def check_minimum_well_rate(self, controles):
-        pass
-
+ 
     def multiply_variables(self):
         """Transform the design variables."""
         controls_per_cycle = np.split(self.controls, self.res_param["nb_cycles"])

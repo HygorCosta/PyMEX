@@ -15,7 +15,7 @@ evaluate_npv: True # calculate net present value
 
 # Cronograma modify or time linspace
 change_cronograma_file: True # False if time_concession explicit in days
-cronograma: 'Cronograma_Base.inc' # if change_cronograma_file is true
+cronograma: 'INCLUDE\Alter_Cronograma.inc' # if change_cronograma_file is true
 time_concession: False # False is change_cronograma_file is True, otherwise number of days
 
 # Convertion unities

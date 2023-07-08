@@ -11,31 +11,19 @@
 # Created: Jul 2019
 # Author: Hygor Costa
 """
-import re
-import pandas as pd
 import multiprocessing as mp
-from string import Template
 import os
-from sys import platform
+import re
 import subprocess
 from pathlib import Path
+from string import Template
+from sys import platform
+from collections import namedtuple
+
 import numpy as np
+import pandas as pd
+
 from .imex_tools import ImexTools
-
-
-def my_pid():
-    """Returns the relative pid of a pool
-    process."""
-    cur_proc = mp.current_process()
-    if cur_proc._identity:
-        return cur_proc._identity[0]
-    return 0
-
-
-def create_name():
-    """Create dat name for parallel
-    run."""
-    return f"rank{my_pid()}"
 
 
 class PyMEX(ImexTools):
@@ -47,17 +35,34 @@ class PyMEX(ImexTools):
         super().__init__(controls, config_file)
         self.prod = None
         self.restore_file = restore_file
-        self.basename = self.cmgfile(create_name())
+        self.basename = self.cmgfile()
         self.npv = None
 
-    def _control_time(self):
-        """Define control time."""
-        time_conc = self.res_param["time_concession"]
-        times = np.linspace(0, time_conc, int(time_conc / 30) + 1, dtype=int)
-        control_time = np.round(self.time_steps()[:-1])
-        id_sort = np.searchsorted(times, control_time)
-        times = np.unique(np.insert(times, id_sort, control_time))
-        return control_time, times
+
+    def cmgfile(self):
+        """
+        A simple wrapper for retrieving CMG file extensions
+        given the basename.
+        :param basename:
+        :return:
+        """
+        file_name = f'{self.tpl.stem}_{os.getpid()}'
+        basename = self.run_path / file_name
+        Extension = namedtuple(
+            "Extension",
+            "dat out irf mrf rwd rwo log sr3",
+        )
+        basename = Extension(
+            basename.with_suffix(".dat"),
+            basename.with_suffix(".out"),
+            basename.with_suffix(".irf"),
+            basename.with_suffix(".mrf"),
+            basename.with_suffix(".rwd"),
+            basename.with_suffix(".rwo"),
+            basename.with_suffix(".log"),
+            basename.with_suffix(".sr3"),
+        )
+        return basename
 
     @staticmethod
     def _alter_wells(well_type, number):
@@ -305,3 +310,12 @@ class PyMEX(ImexTools):
                     f"File {filename} could not be removed,\
                       check if it's yet open."
                 )
+
+    # def _control_time(self):
+    #     """Define control time."""
+    #     time_conc = self.res_param["time_concession"]
+    #     times = np.linspace(0, time_conc, int(time_conc / 30) + 1, dtype=int)
+    #     control_time = np.round(self.time_steps()[:-1])
+    #     id_sort = np.searchsorted(times, control_time)
+    #     times = np.unique(np.insert(times, id_sort, control_time))
+    #     return control_time, times
