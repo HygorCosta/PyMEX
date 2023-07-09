@@ -1,6 +1,7 @@
-from res_pymex import ParallelPyMex
-import pytest
 import numpy as np
+import pytest
+
+from res_pymex import ParallelPyMex
 
 
 @pytest.fixture

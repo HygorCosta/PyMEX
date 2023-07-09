@@ -13,16 +13,14 @@ tpl_report: 'TemplateReport.tpl' # tpl file for report result
 
 ## Reservoir operation settings
 # producers
-nb_prod: 11 #number of producers
-prod_names: ['PROD-1', 'PROD-2', 'PROD-3', 'PROD-4', 'PROD-5', 'PROD-6', 'PROD-7', 'PROD-8', 'PROD-9', 'PROD-10', 'PROD-11']
-max_rate_prod: [200,200,200,200,200,200,200,200,200,200,200] 
-min_rate_prod: 0 # minimum production rate by well
+nb_prod: 15 #number of producers
+prod_names: ['P1','P2','P3','P4','P5','P6','P7','P8','P9','P10','P11','P12','P13','P14','P15']
+max_rate_prod: [2000,2000,2000,2000,2000,2000,2000,2000,2000,2000,2000,2000,2000,2000,2000] 
 
 #injectors
-nb_inj: 7 #number of injectors
-inj_names: ['INJ-1', 'INJ-2', 'INJ-3', 'INJ-4', 'INJ-5', 'INJ-6', 'INJ-7']
-max_rate_inj: [200,200,200,200,200,200,200]
-min_rate_prod: 0 # minimum injection rate by well
+nb_inj: 14 #number of injectors
+inj_names: ['I1','I2','I3','I4','I5','I6','I7','I8','I9','I10','I11','I12','I13','I14']
+max_rate_inj: [2400,2400,900,1200,1200,2400,2400,2400,2400,1200,2400,2400,2400,2400]
 
 # platform
 max_plat_prod: 15898.73 # max liquid prodution rate platform
@@ -30,8 +28,8 @@ max_plat_inj: 18000 # max fluid injection rate platform
 
 # Optimization settings
 nb_cycles: 2 #number of cycles
-tma: 0.1 # a.a
-prices: [70, -2, -2, -2] # oil, gas, water_prod, water_inj (+revenue, -cost)
+tma: 0.08 # a.a
+prices: [45, 0, -6, -2] # oil, gas, water_prod, water_inj (+revenue, -cost)
 
 # Optimization type
 opt_type: 0 # deterministic = 0 or robust = 1

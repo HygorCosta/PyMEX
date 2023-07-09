@@ -4,20 +4,18 @@
 #
 # This file is part of Py_IMEX.
 #
-#
 # You should have received a copy of the GNU General Public License
 # along with HUM.  If not, see <http://www.gnu.org/licenses/>.
 #
 # Created: Jul 2019
 # Author: Hygor Costa
 """
-import multiprocessing as mp
 import os
 import re
+import sys
 import subprocess
 from pathlib import Path
 from string import Template
-from sys import platform
 from collections import namedtuple
 
 import numpy as np
@@ -30,45 +28,15 @@ class PyMEX(ImexTools):
     """
     Manipulate the files give in.
     """
+    __cmginfo = namedtuple("cmginfo", "home_path sim_exe report_exe")
 
-    def __init__(self, controls, config_file, restore_file=None):
-        super().__init__(controls, config_file)
+    def __init__(self, config_reservoir: str, controls: np.ndarray):
+        super().__init__(config_reservoir)
+        if isinstance(controls, list):
+            controls = np.array(controls)
+        self.scaled_controls = self.scale_variables(controls)
         self.prod = None
-        self.restore_file = restore_file
-        self.basename = self.cmgfile()
-        self.npv = None
-
-
-    def cmgfile(self):
-        """
-        A simple wrapper for retrieving CMG file extensions
-        given the basename.
-        :param basename:
-        :return:
-        """
-        file_name = f'{self.tpl.stem}_{os.getpid()}'
-        basename = self.run_path / file_name
-        Extension = namedtuple(
-            "Extension",
-            "dat out irf mrf rwd rwo log sr3",
-        )
-        basename = Extension(
-            basename.with_suffix(".dat"),
-            basename.with_suffix(".out"),
-            basename.with_suffix(".irf"),
-            basename.with_suffix(".mrf"),
-            basename.with_suffix(".rwd"),
-            basename.with_suffix(".rwo"),
-            basename.with_suffix(".log"),
-            basename.with_suffix(".sr3"),
-        )
-        return basename
-
-    @staticmethod
-    def _alter_wells(well_type, number):
-        """Create the wells names."""
-        wells_name = [f"'{well_type}{i + 1}'" for i in range(number)]
-        return " ".join(["*ALTER"] + wells_name)
+        self.procedure = None
 
     @staticmethod
     def _wells_rate(well_prod):
@@ -78,227 +46,186 @@ class PyMEX(ImexTools):
 
     def _control_alter_strings(self, control):
         div = "**" + "-" * 30
-        nb_prod = self.res_param["nb_prod"]
-        nb_inj = self.res_param["nb_inj"]
-        prod_name = self._alter_wells("P", nb_prod)
-        prod_rate = self._wells_rate(control[:nb_prod])
-        inj_name = self._alter_wells("I", nb_inj)
-        inj_rate = self._wells_rate(control[nb_prod:])
-        lines = [
-            div,
-            prod_name,
-            prod_rate,
-            div,
-            inj_name,
-            inj_rate,
-            div,
-            "\n",
-        ]
+        wells_name = [f'\'{well}\'' for well in self.get_well_aliases()]
+        prod = "**" + "-" * 9 + " PRODUCERS " + "-" * 10
+        alter_prod = f'*ALTER {" ".join(wells_name[:self.num_producers])}'
+        inj = "**" + "-" * 9 + " INJECTORS " + "-" * 10
+        alter_inj = f'*ALTER {" ".join(wells_name[self.num_producers:])}'
+        prod_controls = self._wells_rate(control[:self.num_producers])
+        inj_controls = self._wells_rate(control[self.num_producers:])
+        lines = [div, prod, alter_prod, prod_controls,
+                 div, inj, alter_inj, inj_controls, div]
         return "\n".join(lines)
 
     def _wells_alter_strings(self):
-        controls = []
-        for control in self.modif_controls:
-            controls.append(self._control_alter_strings(control))
-        return controls
+        return [self._control_alter_strings(control) for control in self.scaled_controls]
 
     def _modify_cronograma_file(self):
         """Replace control tag <PyMEX>alter_wells</PyMEX>
         in cronograma_file.
         """
-        with open(self.cronograma, "r+") as file:
+        with open(self.schedule, "r+", encoding='UTF-8') as file:
             content = file.read()
-            pattern = re.compile(r"<PyMEX>alter_wells</PyMEX>")
+            pattern = re.compile(r"<PyMEX>ALTER_WELLS</PyMEX>")
             controls = self._wells_alter_strings()
             for control in controls:
                 content = pattern.sub(control, content, count=1)
-        return content
 
-    def _regular_spaced_time(self):
-        content_text = []
+        with open(self.schedule, "w", encoding='UTF-8') as file:
+            file.write(content)
 
-        def write_alter_time(day, control):
-            """Write the ALTER element."""
-            div = "**" + "-" * 30
-            if day == 0:
-                time = "**TIME " + str(day)
-            else:
-                time = "*TIME " + str(day)
+    @staticmethod
+    def _sub_include_path_file(text: str):
+        return re.sub(r'INCLUDE\s+\'(.*)\'', r"INCLUDE '..\\\1'", text, flags=re.M)
 
-            wells = self._control_alter_strings(control)
-            lines = [
-                div,
-                time,
-                div,
-                wells,
-                "\n",
-            ]
-            return "\n".join(lines)
+    # def create_well_operation(self):
+    #     """Create a include file (.inc) to be incorporated to the .dat.
+    #     Wrap the design variables in separated control cycles
+    #     if the problem is time variable,
+    #     so the last list corresponds to these.
+    #     new_controls = list(chunks(design_controls, npp + npi))
+    #     """
+    #     with open(self.reservoir_tpl, "r", encoding='UTF-8') as tpl,\
+    #             open(self.basename.dat, "w", encoding='UTF-8') as dat:
+    #         template_content = tpl.read()
+    #         # template_content = self._sub_include_path_file(template_content)
+    #         self._modify_cronograma_file()
 
-        control_time, times = self._control_time()
-        count = 0
-        ctime = control_time[count]
-
-        for time_step in times[:-1]:
-            if count < len(control_time) and ctime == time_step:
-                control = self.modif_controls[count]
-                content_text += write_alter_time(ctime, control)
-                count += 1
-                if count < len(control_time):
-                    ctime = control_time[count]
-            else:
-                time = "*TIME " + str(time_step) + "\n"
-                content_text += time
-        return content_text
-
-    def include_operation(self):
-        """Print operation of the wells."""
-        if self.res_param["change_cronograma_file"]:
-            return self._modify_cronograma_file()
-        else:
-            return self._regular_spaced_time()
-
-    def create_well_operation(self):
-        """Create a include file (.inc) to be incorporated to the .dat.
-
-        Wrap the design variables in separated control cycles
-        if the problem is time variable,
-        so the last list corresponds to these.
-        new_controls = list(chunks(design_controls, npp + npi))
-        """
-        type_opera = self.res_param["type_opera"]
-        if type_opera == 0:  # full_capacity
-            self.full_capacity()
-
-        with open(self.tpl, "r") as tpl, open(self.basename.dat, "w") as dat:
-            template_content = tpl.read()
-            if self.controls is not None:
-                operation_content = self.include_operation()
-                pattern = re.compile(r"<PyMEX>cronograma</PyMEX>")
-                template_content = pattern.sub(operation_content, template_content)
-            dat.write(template_content)
+    def write_dat_file(self):
+        """Copy dat file to run path."""
+        with open(self.reservoir_tpl, "r", encoding='UTF-8') as tpl:
+            content = tpl.read()
+        with open(self.basename.dat, "w", encoding='UTF-8') as dat:
+            dat.write(content)
 
     def rwd_file(self):
         """create *.rwd (output conditions) from report.tmpl."""
-        tpl_report = Path(self.res_param["path"]) / self.res_param["tpl_report"]
-        with open(tpl_report, "r") as tmpl, open(self.basename.rwd, "w") as rwd:
+        tpl_report = Path('res_pymex/TemplateReport.tpl')
+        with open(tpl_report, "r", encoding='UTF-8') as tmpl, \
+                open(self.basename.rwd, "w", encoding='UTF-8') as rwd:
             tpl = Template(tmpl.read())
-            content = tpl.substitute(SR3FILE=self.basename.sr3.name)
+            content = tpl.substitute(SR3FILE=self.basename.sr3.absolute())
             rwd.write(content)
+
+    @classmethod
+    def get_cmginfo(cls):
+        """Get CMG Simulatior Information and Executables."""
+        try:
+            cmg_home = os.environ['CMG_HOME']
+            simulator = list(Path(cmg_home).rglob('mx*.exe'))
+            sim_exe = sorted(simulator)[-1]
+            report = list(Path(cmg_home).rglob('report*.exe'))
+            report_exe = sorted(report)[-1]
+            return cls.__cmginfo(cmg_home, sim_exe, report_exe)
+        except KeyError as error:
+            raise KeyError(
+                'Verifique se a variável de ambiente CMG_HOME existe!') from error       
 
     def run_imex(self):
         """call IMEX + Results Report."""
-        # environ['CMG_HOME'] = '/cmg'
+        # self.create_well_operation()
+        if not hasattr(self, "cmginfo"):
+            self.cmginfo = self.get_cmginfo()
+        self._modify_cronograma_file()
+        self.rwd_file()
+        self.write_dat_file()
+        try:
+            with open(self.basename.log, 'w', encoding='UTF-8') as log:
+                sim_command = [self.cmginfo.sim_exe, "-f",
+                                self.basename.dat.absolute(), "-wait", "-dd"]
+                if self.cfg['num_cores_parasol'] > 1:
+                    sim_command += ["-parasol", str(self.cfg['num_cores_parasol']), "-doms"]
+                self.procedure = subprocess.Popen(sim_command, stdout=log)
+                # self.procedure = subprocess.run(
+                #     path, stdout=log, cwd=self.temp_run, check=True, shell=True)
+        except subprocess.CalledProcessError as error:
+            sys.exit(
+                f"Error - Não foi possível executar o IMEX, verificar: {error}")
 
-        with open(self.basename.log, "w") as log:
-            if platform == 'linux':
-                path = ["/cmg/RunSim.sh",
-                        "imex",
-                        "2018.10",
-                        self.basename.dat]
-            elif platform == 'win32':
-                path = [self.res_param['cmg_exe_path'], '-f', self.basename.dat.name]
-            procedure = subprocess.run(path, stdout=log, cwd=self.run_path, check=True, shell=True)
-            self.run_report_results(procedure)
+    def read_rwo_file(self):
+        """Read output file (rwo) and build the production dataframe."""
+        with open(self.basename.rwo, 'r+', encoding='UTF-8') as rwo:
+            self.prod = pd.read_csv(rwo, sep="\t", index_col=False,
+                                    usecols=np.r_[:5], skiprows=np.r_[0, 1, 3:6])
+            self.prod = self.prod.rename(
+                columns={
+                    'TIME': 'time',
+                    'Period Oil Production - Monthly SC': "oil_prod",
+                    'Period Gas Production - Monthly SC': "gas_prod",
+                    'Period Water Production - Monthly SC': "water_prod",
+                    'Period Water Production - Monthly SC.1': "water_inj"
+                }
+            )
+            # if self.m3_to_bbl:
+            #     self.prod.loc[:, self.prod.columns != 'time'] *= 6.29
+            # if self.gas_to_boe:
+            #     self.prod.gas_prod /= 1017.045686
 
-    def run_report_results(self, procedure):
+    def run_report_results(self):
         """Get production for results."""
-        if procedure.returncode == 0:
-            path_results = [self.res_param['cmg_results_path'],
+        try:
+            report_command = [self.cmginfo.report_exe,
                             '-f',
                             self.basename.rwd.name,
                             '-o',
                             self.basename.rwo.name]
-            subprocess.run(
-                path_results,
+            self.procedure = subprocess.run(
+                report_command,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
-                cwd=self.run_path,
-                check=True,
-                shell=True
+                cwd=self.basename.dat.parent,
+                shell=True,
+                check=True
             )
-            try:
-                with open(self.basename.rwo, 'r+') as rwo:
-                    self.prod = pd.read_csv(rwo, sep="\t", index_col=False, usecols=np.r_[:6], skiprows=np.r_[0,1,3:6])
-                    self.prod = self.prod.rename(
-                        columns={
-                                'TIME': 'time',
-                                'Period Oil Production - Monthly SC': "oil_prod",
-                                'Period Gas Production - Monthly SC': "gas_prod",
-                                'Period Water Production - Monthly SC': "water_prod",
-                                'Period Water Production - Monthly SC.1': "water_inj",
-                                'Liquid Rate SC': "liq_prod"
-                        }
-                    )
-                    if self.res_param['vol_m3_to_bbl']:
-                        self.prod.loc[:, self.prod.columns != 'time'] *= 6.29
-                    if self.res_param['gas_to_oil_equiv']:
-                        self.prod.gas_prod /= 1017.045686
-            except StopIteration as err:
-                print("StopIteration error: Failed in Imex run.")
-                print(f"Verify {self.basename.log}")
-                raise err
-        else:
-            # IMEX has failed, receive None
-            self.prod = None
+        except subprocess.CalledProcessError as error:
+            print(f"Report não pode ser executador, verificar: {error}")
 
-    def restore_run(self):
-        """Restart the IMEX run."""
-        with open(self.basename["rwo"]) as rwo:
-            self.prod = pd.read_csv(rwo, sep="\t", index_col=False, header=6)
-        self.prod = self.prod.dropna(axis=1, how="all")
-        self._colum_names()
+    # def restore_run(self):
+    #     """Restart the IMEX run."""
+    #     with open(self.basename.rwo, 'r+', encoding='UTF-8') as rwo:
+    #         self.prod = pd.read_csv(rwo, sep="\t", index_col=False, header=6)
+    #         self.prod = self.prod.dropna(axis=1, how="all")
+    #         self.prod = self.prod.rename(
+    #             columns={
+    #                 'TIME': 'time',
+    #                 'Period Oil Production - Monthly SC': "oil_prod",
+    #                 'Period Gas Production - Monthly SC': "gas_prod",
+    #                 'Period Water Production - Monthly SC': "water_prod",
+    #                 'Period Water Production - Monthly SC.1': "water_inj",
+    #                 'Liquid Rate SC': "liq_prod"
+    #             }
+    #         )
 
-    def cash_flow(self):
+    def cash_flow(self, prices: np.ndarray):
         """Return the cash flow from production."""
         production = self.prod.loc[:, ['oil_prod',
                                        'gas_prod',
                                        'water_prod',
                                        'water_inj']]
-        return production.mul(self.res_param['prices']).sum(axis=1)
+        return production.mul(prices).sum(axis=1)
 
-    def net_present_value(self):
+    def npv(self):
         """ Calculate the net present value of the \
             reservoir production"""
-
-        # Convert to periodic rate
-        periodic_rate = ((1 + self.res_param["tma"]) ** (1 / 365)) - 1
-
-        # Create the cash flow (x 10^6) (Format of the numpy.npv())
-        cash_flows = self.cash_flow().to_numpy()
-
-        # Discount tax
+        self.base_run()
+        periodic_rate = ((1 + self.cfg['tma']) ** (1 / 365)) - 1
+        cash_flows = self.cash_flow(self.cfg['prices']).to_numpy()
         time = self.prod["time"].to_numpy()
         tax = 1 / np.power((1 + periodic_rate), time)
-        # Billions
         return np.sum(cash_flows * tax) * 1e-9
 
-    def __call__(self):
+    def base_run(self):
         """
         Run Imex.
         """
-        if not self.restore_file:
-            # Verify if the Run_Path exist
-            self.run_path.mkdir(parents=True, exist_ok=True)
-
-            # Write the well controls in data file
-            self.create_well_operation()
-
-            # Create .rwd file
-            self.rwd_file()
-
-            # Run Imex + Results Report
-            self.run_imex()
-
-            # Evaluate the net present value
-            if self.res_param["evaluate_npv"]:
-                self.npv = self.net_present_value()
-
-            # Remove all files create in Run Imex
-            if self.res_param['clean_up_results']:
-                self.clean_up()
-        else:
-            self.restore_run()
+        # if not self.restore_file:
+        # Verify if the Run_Path exist
+        self.temp_run.mkdir(parents=True, exist_ok=True)
+        self.run_imex()
+        self.run_report_results()
+        self.read_rwo_file()
+        # else:
+        #     self.restore_run()
 
     def clean_up(self):
         """Delet imex auxiliar files."""

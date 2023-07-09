@@ -1,6 +1,9 @@
 """ Parallel computation. """
 import multiprocessing as mp
+from itertools import repeat
+
 import numpy as np
+
 from .mani_param import PyMEX
 
 
@@ -8,7 +11,7 @@ class ParallelPyMex:
 
     """Run imex in parallel for reservoir optimization."""
 
-    def __init__(self, config_file, pool_size=None):
+    def __init__(self, reservoir_dat, pool_size=0.5*mp.cpu_count()):
         """TODO: to be defined.
 
         Parameters
@@ -22,18 +25,16 @@ class ParallelPyMex:
             so it's sequential.
 
         """
-        self.config_file = config_file
+        self.reservoir_dat = reservoir_dat
         self.pool_size = pool_size
 
-    def run(self, controls):
-        """Run PyMEX in a sequential way."""
-        model = PyMEX(controls, self.config_file)
-        model()
-        return model.npv
+    def net_present_value(self, controls, prices, tma):
+        """Evaluate the npv foe each single control"""
+        model = PyMEX(self.reservoir_dat, controls)
+        return model.npv(prices, tma)
 
-    def pool_run(self, controls):
+    def pool_run(self, controls, prices, tma_aa):
         """Run imex in parallel.
-
         Parameters
         ----------
         pool_size: int
@@ -42,7 +43,8 @@ class ParallelPyMex:
         """
         if self.pool_size and controls.ndim > 1:
             with mp.Pool(self.pool_size) as proc:
-                npv = proc.map(self.run, controls.tolist())
+                npv = proc.starmap(self.net_present_value, zip(
+                    controls, repeat(prices), repeat(tma_aa)))
         else:
-            npv = self.run(controls)
+            npv = self.net_present_value(controls, prices, tma_aa)
         return np.array(npv)
