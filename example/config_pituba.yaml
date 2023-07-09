@@ -40,5 +40,6 @@ num_cores_parasol: 4
 num_cores_simulation: 4
 
 # Options
-clean_up_results: True # delete all temporary files
+clean_up_results: 'keep_sr3' # true = delete all files, keep_sr3 = delete all files except .sr3, False = do not delete any file
+# clean_up_results: True
 # evaluate_npv: True # calculate net present value

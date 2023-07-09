@@ -20,6 +20,7 @@ from collections import namedtuple
 
 import numpy as np
 import pandas as pd
+import shutil
 
 from .imex_tools import ImexTools
 
@@ -104,7 +105,7 @@ class PyMEX(ImexTools):
         with open(tpl_report, "r", encoding='UTF-8') as tmpl, \
                 open(self.basename.rwd, "w", encoding='UTF-8') as rwd:
             tpl = Template(tmpl.read())
-            content = tpl.substitute(SR3FILE=self.basename.sr3.absolute())
+            content = tpl.substitute(SR3FILE=self.basename.sr3.name)
             rwd.write(content)
 
     @classmethod
@@ -135,9 +136,7 @@ class PyMEX(ImexTools):
                                 self.basename.dat.absolute(), "-wait", "-dd"]
                 if self.cfg['num_cores_parasol'] > 1:
                     sim_command += ["-parasol", str(self.cfg['num_cores_parasol']), "-doms"]
-                self.procedure = subprocess.Popen(sim_command, stdout=log)
-                # self.procedure = subprocess.run(
-                #     path, stdout=log, cwd=self.temp_run, check=True, shell=True)
+                self.procedure = subprocess.run(sim_command, stdout=log, check=True)
         except subprocess.CalledProcessError as error:
             sys.exit(
                 f"Error - Não foi possível executar o IMEX, verificar: {error}")
@@ -156,10 +155,6 @@ class PyMEX(ImexTools):
                     'Period Water Production - Monthly SC.1': "water_inj"
                 }
             )
-            # if self.m3_to_bbl:
-            #     self.prod.loc[:, self.prod.columns != 'time'] *= 6.29
-            # if self.gas_to_boe:
-            #     self.prod.gas_prod /= 1017.045686
 
     def run_report_results(self):
         """Get production for results."""
@@ -180,22 +175,6 @@ class PyMEX(ImexTools):
         except subprocess.CalledProcessError as error:
             print(f"Report não pode ser executador, verificar: {error}")
 
-    # def restore_run(self):
-    #     """Restart the IMEX run."""
-    #     with open(self.basename.rwo, 'r+', encoding='UTF-8') as rwo:
-    #         self.prod = pd.read_csv(rwo, sep="\t", index_col=False, header=6)
-    #         self.prod = self.prod.dropna(axis=1, how="all")
-    #         self.prod = self.prod.rename(
-    #             columns={
-    #                 'TIME': 'time',
-    #                 'Period Oil Production - Monthly SC': "oil_prod",
-    #                 'Period Gas Production - Monthly SC': "gas_prod",
-    #                 'Period Water Production - Monthly SC': "water_prod",
-    #                 'Period Water Production - Monthly SC.1': "water_inj",
-    #                 'Liquid Rate SC': "liq_prod"
-    #             }
-    #         )
-
     def cash_flow(self, prices: np.ndarray):
         """Return the cash flow from production."""
         production = self.prod.loc[:, ['oil_prod',
@@ -207,7 +186,8 @@ class PyMEX(ImexTools):
     def npv(self):
         """ Calculate the net present value of the \
             reservoir production"""
-        self.base_run()
+        if self.prod is None:
+            self.base_run()
         periodic_rate = ((1 + self.cfg['tma']) ** (1 / 365)) - 1
         cash_flows = self.cash_flow(self.cfg['prices']).to_numpy()
         time = self.prod["time"].to_numpy()
@@ -218,22 +198,20 @@ class PyMEX(ImexTools):
         """
         Run Imex.
         """
-        # if not self.restore_file:
-        # Verify if the Run_Path exist
         self.temp_run.mkdir(parents=True, exist_ok=True)
         self.run_imex()
         self.run_report_results()
         self.read_rwo_file()
-        # else:
-        #     self.restore_run()
+        self.clean_up()
 
     def clean_up(self):
-        """Delet imex auxiliar files."""
-        for _, filename in self.basename._asdict().items():
-            try:
-                os.remove(filename)
-            except OSError:
-                print(
-                    f"File {filename} could not be removed,\
-                      check if it's yet open."
-                )
+        """ Clean files from run path."""
+        if self.cfg['clean_up_results'] is True:
+            shutil.rmtree(self.basename.dat.parent)
+        elif self.cfg['clean_up_results'].lower() == 'keep_sr3':
+            for item in os.scandir(self.basename.dat.parent):
+                if item.is_dir():
+                    shutil.rmtree(item)
+                elif item.is_file() and not item.name.endswith(".sr3"):
+                    os.remove(item)
+        
