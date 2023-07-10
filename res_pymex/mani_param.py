@@ -31,10 +31,11 @@ class PyMEX(ImexTools):
     """
     __cmginfo = namedtuple("cmginfo", "home_path sim_exe report_exe")
 
-    def __init__(self, config_reservoir: str, controls: np.ndarray):
+    def __init__(self, config_reservoir: str, controls: np.ndarray, model_number=None):
         super().__init__(config_reservoir)
         if isinstance(controls, list):
             controls = np.array(controls)
+        self.realization = model_number
         self.scaled_controls = self.scale_variables(controls)
         self.prod = None
         self.procedure = None
@@ -95,8 +96,9 @@ class PyMEX(ImexTools):
     def write_dat_file(self):
         """Copy dat file to run path."""
         with open(self.reservoir_tpl, "r", encoding='UTF-8') as tpl:
-            content = tpl.read()
+            content = Template(tpl.read())
         with open(self.basename.dat, "w", encoding='UTF-8') as dat:
+            content = content.substitute(N1=self.realization)
             dat.write(content)
 
     def rwd_file(self):
@@ -130,6 +132,7 @@ class PyMEX(ImexTools):
         self._modify_cronograma_file()
         self.rwd_file()
         self.write_dat_file()
+        self.copy_to()
         try:
             with open(self.basename.log, 'w', encoding='UTF-8') as log:
                 sim_command = [self.cmginfo.sim_exe, "-f",
@@ -215,3 +218,28 @@ class PyMEX(ImexTools):
                 elif item.is_file() and not item.name.endswith(".sr3"):
                     os.remove(item)
         
+    def get_realization(self, content, model_number):
+        """Replace $N1 for specifiec realization number."""
+        tpl = Template(content)
+        content = tpl.substitute(N1=model_number)
+        return content
+
+    def _parse_include_files(self, datafile):
+        """Parse simulation file for *INCLUDE files and return a list."""
+        with open(datafile, "r", encoding='UTF-8') as file:
+            lines = file.read()
+
+        pattern = r'\n\s*\*?include\s*[\'|"](.*)[\'|"]' 
+        return re.findall(pattern, lines, flags=re.IGNORECASE)
+
+    def copy_to(self):
+        """Copy simulation files to destination directory."""
+        if self.realization is None: #deterministic
+            shutil.copytree(self.reservoir_tpl.parent / self.cfg['inc_folder'],
+                        self.inc_run_path, dirs_exist_ok=True)
+        else: #robust
+            src_files = [self.reservoir_tpl.parent / f for f in self._parse_include_files(self.basename.dat)]
+            dst_files = [self.basename.dat.parent / f for f in self._parse_include_files(self.basename.dat)]
+            for src, dst in zip(src_files, dst_files):
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(src, dst)
