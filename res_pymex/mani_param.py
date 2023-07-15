@@ -10,6 +10,7 @@
 # Created: Jul 2019
 # Author: Hygor Costa
 """
+import logging
 import os
 import re
 import sys
@@ -25,13 +26,16 @@ import shutil
 from .imex_tools import ImexTools
 
 
+logging.basicConfig(format='%(process)d-%(message)s')
+
+
 class PyMEX(ImexTools):
     """
     Manipulate the files give in.
     """
     __cmginfo = namedtuple("cmginfo", "home_path sim_exe report_exe")
 
-    def __init__(self, config_reservoir: str, controls: np.ndarray, model_number=None):
+    def __init__(self, config_reservoir: str, controls: np.ndarray, model_number:int = None):
         super().__init__(config_reservoir)
         if isinstance(controls, list):
             controls = np.array(controls)
@@ -98,7 +102,8 @@ class PyMEX(ImexTools):
         with open(self.reservoir_tpl, "r", encoding='UTF-8') as tpl:
             content = Template(tpl.read())
         with open(self.basename.dat, "w", encoding='UTF-8') as dat:
-            content = content.substitute(N1=self.realization)
+            if self.realization:
+                content = content.substitute(N1=self.realization)
             dat.write(content)
 
     def rwd_file(self):
@@ -122,18 +127,19 @@ class PyMEX(ImexTools):
             return cls.__cmginfo(cmg_home, sim_exe, report_exe)
         except KeyError as error:
             raise KeyError(
-                'Verifique se a variável de ambiente CMG_HOME existe!') from error       
+                'Verifique se a variável de ambiente CMG_HOME existe!') from error
 
     def run_imex(self):
         """call IMEX + Results Report."""
         # self.create_well_operation()
         if not hasattr(self, "cmginfo"):
             self.cmginfo = self.get_cmginfo()
-        self._modify_cronograma_file()
-        self.rwd_file()
         self.write_dat_file()
         self.copy_to()
+        self._modify_cronograma_file()
+        self.rwd_file()
         try:
+            logging.debug('Run IMEX...')
             with open(self.basename.log, 'w', encoding='UTF-8') as log:
                 sim_command = [self.cmginfo.sim_exe, "-f",
                                 self.basename.dat.absolute(), "-wait", "-dd"]
@@ -162,6 +168,7 @@ class PyMEX(ImexTools):
     def run_report_results(self):
         """Get production for results."""
         try:
+            logging.debug('Run Results Report...')
             report_command = [self.cmginfo.report_exe,
                             '-f',
                             self.basename.rwd.name,
@@ -201,6 +208,7 @@ class PyMEX(ImexTools):
         """
         Run Imex.
         """
+        logging.debug('## Inicialized PyMEX... ')
         self.temp_run.mkdir(parents=True, exist_ok=True)
         self.run_imex()
         self.run_report_results()
@@ -209,6 +217,7 @@ class PyMEX(ImexTools):
 
     def clean_up(self):
         """ Clean files from run path."""
+        logging.debug(f'Deleting {self.basename.dat.parent} folder...')
         if self.cfg['clean_up_results'] is True:
             shutil.rmtree(self.basename.dat.parent)
         elif self.cfg['clean_up_results'].lower() == 'keep_sr3':
@@ -217,9 +226,9 @@ class PyMEX(ImexTools):
                     shutil.rmtree(item)
                 elif item.is_file() and not item.name.endswith(".sr3"):
                     os.remove(item)
-        
+
     def get_realization(self, content, model_number):
-        """Replace $N1 for specifiec realization number."""
+        """Replace $N1 for model number in TPL dat."""
         tpl = Template(content)
         content = tpl.substitute(N1=model_number)
         return content
@@ -229,11 +238,12 @@ class PyMEX(ImexTools):
         with open(datafile, "r", encoding='UTF-8') as file:
             lines = file.read()
 
-        pattern = r'\n\s*\*?include\s*[\'|"](.*)[\'|"]' 
+        pattern = r'\n\s*\*?include\s*[\'|"](.*)[\'|"]'
         return re.findall(pattern, lines, flags=re.IGNORECASE)
 
     def copy_to(self):
         """Copy simulation files to destination directory."""
+        logging.debug('Copying include files...')
         if self.realization is None: #deterministic
             shutil.copytree(self.reservoir_tpl.parent / self.cfg['inc_folder'],
                         self.inc_run_path, dirs_exist_ok=True)
