@@ -52,7 +52,6 @@ class ImexTools:
         self.schedule = self.inc_run_path / self.cfg['schedule']
         self.max_plat_prod = self.cfg['max_plat_prod']
         self.max_plat_inj = self.cfg['max_plat_inj']
-        self.info_wells = self.get_wells_info()
         self.run_path = None
 
     @staticmethod
@@ -81,8 +80,6 @@ class ImexTools:
         self.run_path = self.temp_run / basename
         self.run_path.mkdir(parents=True, exist_ok=False)
         self.inc_run_path = self.run_path / self.cfg['inc_folder']
-        shutil.copytree(self.reservoir_tpl.parent / self.cfg['inc_folder'], 
-                        self.inc_run_path, dirs_exist_ok=True)
         basename = self.run_path / basename
         Extension = namedtuple(
             "Extension",
@@ -169,29 +166,29 @@ class ImexTools:
             df['well'] = np.repeat(wells_alias, 2)
         return df[['well', 'const_order', 'operate', 'const_type', 'value']]
 
-    def get_constraint(self, well_type: str, group: str):
-        """Get constraint from producers.
+    # def get_constraint(self, well_type: str, group: str):
+    #     """Get constraint from producers.
 
-        Args:
-            well_type (str): 'prod' for producers and 'inj' for injectores
-            group (str): select the constraint group from 'primary' or 'secondary'
+    #     Args:
+    #         well_type (str): 'prod' for producers and 'inj' for injectores
+    #         group (str): select the constraint group from 'primary' or 'secondary'
 
-        Returns:
-            nd.array: with the same length of wells
-        """
-        well_group = self.info_wells.groupby('well_type').get_group(well_type)
-        const_grouped = well_group.groupby('const_order')
-        return const_grouped.get_group(group)['value'].astype(float).to_numpy()
+    #     Returns:
+    #         nd.array: with the same length of wells
+    #     """
+    #     well_group = self.info_wells.groupby('well_type').get_group(well_type)
+    #     const_grouped = well_group.groupby('const_order')
+    #     return const_grouped.get_group(group)['value'].astype(float).to_numpy()
 
-    def get_wells_info(self):
-        """Dataframe with wells information."""
-        prod_info = self.read_wells_include_file(
-            rel_path='INCLUDE/Produtores.inc')
-        prod_info['well_type'] = 'prod'
-        inj_info = self.read_wells_include_file(
-            rel_path='INCLUDE/Injetores.inc')
-        inj_info['well_type'] = 'inj'
-        return pd.concat([prod_info, inj_info], ignore_index=True)
+    # def get_wells_info(self):
+    #     """Dataframe with wells information."""
+    #     prod_info = self.read_wells_include_file(
+    #         rel_path='INCLUDE/Produtores.inc')
+    #     prod_info['well_type'] = 'prod'
+    #     inj_info = self.read_wells_include_file(
+    #         rel_path='INCLUDE/Injetores.inc')
+    #     inj_info['well_type'] = 'inj'
+    #     return pd.concat([prod_info, inj_info], ignore_index=True)
 
     @property
     def num_producers(self):
@@ -203,8 +200,8 @@ class ImexTools:
     @property
     def num_injectors(self):
         """Number of well injectors"""
-        injectors = self.info_wells.groupby('well_type').get_group('inj')
-        return injectors['well'].nunique()
+        # injectors = self.info_wells.groupby('well_type').get_group('inj')
+        return self.cfg['nb_inj']
 
     @property
     def num_wells(self):
@@ -217,18 +214,3 @@ class ImexTools:
         # return self.info_wells['well'].unique()
         return self.cfg['prod_names'] + self.cfg['inj_names']
 
-    def _parse_include_files(self, datafile):
-        """Parse simulation file for *INCLUDE files and return a list."""
-        with open(datafile, "r", encoding='UTF-8') as file:
-            lines = file.read()
-
-        pattern = r'\n\s*[*]?\s*include\s+[\'|"]([\.\w-])[\'|"]'
-        return re.findall(pattern, lines, flags=re.IGNORECASE)
-
-    # def copy_to(self):
-    #     """Copy simulation files to destination directory."""
-    #     src_files = [self.reservoir_tpl.parent / f for f in self._parse_include_files(self.reservoir_tpl)]
-    #     dst_files = [self.run_path / f for f in self._parse_include_files(self.reservoir_tpl)]
-    #     for src, dst in zip(src_files, dst_files):
-    #         dst.mkdir(parents=True, exist_ok=True)
-    #         shutil.copy(src, dst)

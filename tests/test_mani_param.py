@@ -17,6 +17,13 @@ def pymex():
     controls = [1] * 58
     return PyMEX('example/config_pituba.yaml', controls)
 
+@pytest.fixture(name='olymp')
+def pymex_olymp():
+    """Create instance of Pymex to test.
+    """
+    controls = [1] * 36
+    return PyMEX('model/OLYMPUS/config_olympus.yaml', controls, 32)
+
 def test_imex_run_path_is_correct_find(pymex_instance):
     """Verifica se o arquivo executável do IMEX foi 
     corretamente encontrado.
@@ -104,3 +111,12 @@ def test_scaled_controls(pymex_instance):
 def test_run(pymex_instance):
     obtido = pymex_instance.npv()
     assert obtido != 0
+
+def test_run_olympus_write_dat_file(olymp):
+    obtido = olymp.write_dat_file()
+    assert obtido != 0
+
+def test_run_olympus_copy_to(olymp):
+    olymp.write_dat_file()
+    olymp.copy_to()
+    assert 1
