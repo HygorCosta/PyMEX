@@ -4,6 +4,7 @@ build/
 dist/
 pymex_npv.egg-info/
 model/
+notebooks/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

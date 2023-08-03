@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from res_pymex import ParallelPyMex
+from res_pymex.multi_process import ParallelPyMex
 
 
 @pytest.fixture
