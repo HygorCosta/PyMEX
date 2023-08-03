@@ -20,7 +20,7 @@ def test_if_reservoir_tpl_folder_is_find(pituba):
 
 
 def test_read_max_group_rate_returns_a_list(pituba):
-    """Test if the functions returns a list with the maximum 
+    """Test if the functions returns a list with the maximum
     water injection and liquid production."""
     obtido = pituba.read_max_group_rate()
     assert isinstance(obtido, list)

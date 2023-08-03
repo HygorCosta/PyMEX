@@ -1,5 +1,4 @@
 """ Parallel computation. """
-import logging
 import multiprocessing as mp
 from itertools import repeat
 

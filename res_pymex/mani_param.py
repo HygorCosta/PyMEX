@@ -18,50 +18,104 @@ import subprocess
 from pathlib import Path
 from string import Template
 from collections import namedtuple
+from .settings import Model, Wells, Optimization
 
 import numpy as np
 import pandas as pd
 import shutil
+import yaml
 
-from .imex_tools import ImexTools
+from .imex_tools import cmgfile
 
 
 logging.basicConfig(format='%(process)d-%(message)s')
 
 
-class PyMEX(ImexTools):
+class PyMEX:
     """
     Manipulate the files give in.
     """
     __cmginfo = namedtuple("cmginfo", "home_path sim_exe report_exe")
 
-    def __init__(self, config_reservoir: str, controls: np.ndarray, model_number:int = None):
-        super().__init__(config_reservoir)
-        if isinstance(controls, list):
-            controls = np.array(controls)
+    def __init__(self, reservoir_config:yaml, controls:np.ndarray, model_number:int = None):
+        self.import_settings(reservoir_config)
         self.realization = model_number
-        self.scaled_controls = self.scale_variables(controls)
-        self.prod = None
+        self.scaled_controls = self._get_scaled_controls(controls)
+        self.cmginfo = self.get_cmginfo()
+        self.production = None
         self.procedure = None
+
+    def import_settings(self, config_yaml):
+        with open(config_yaml, "r", encoding='UTF-8') as yamlfile:
+            data = yaml.load(yamlfile, Loader=yaml.FullLoader)
+            self.model = self._import_model(data)
+            self.wells = self._import_wells_operate(data)
+            self.opt = self._import_opt_settings(data)
+
+    @staticmethod
+    def _import_model(data_yaml):
+        new_model = Model()
+        new_model.tpl = Path(data_yaml['tpl'])
+        new_model.temp_run = new_model.tpl.parent / 'temp_run'
+        new_model.basename = cmgfile(new_model.temp_run / new_model.tpl.name)
+        new_model.tpl_report = Path(data_yaml['tpl_report'])
+        new_model.tpl_schedule = Path(data_yaml['schedule'])
+        return new_model
+
+    @staticmethod
+    def _import_wells_operate(data_yaml):
+        new_well = Wells()
+        new_well.control_type = data_yaml['control_type']
+        new_well.prod = data_yaml['prod_names']
+        new_well.prod_operate = np.array([data_yaml['max_prod'], data_yaml['min_prod']], np.float64)
+        new_well.inj = data_yaml['inj_names']
+        new_well.inj_operate = np.array([data_yaml['max_inj'], data_yaml['min_inj']], np.float64)
+        new_well.max_plat = np.array(data_yaml['max_plat'])
+        return new_well
+
+    @staticmethod
+    def _import_opt_settings(data_yaml):
+        new_opt = Optimization()
+        new_opt.numb_cic = int(data_yaml['numb_cic'])
+        new_opt.tma = data_yaml['tma']
+        new_opt.prices = data_yaml['prices']
+        new_opt.parasol = data_yaml['num_cores_parasol']
+        new_opt.clean_files = data_yaml['clean_up_results']
+        return new_opt
 
     @staticmethod
     def _wells_rate(well_prod):
         """Return the string of the wells rate."""
         prod_values = map(str, np.round(well_prod, 4))
-        return " ".join(prod_values)
+        return '\t' + " ".join(prod_values)
 
     def _control_alter_strings(self, control):
         div = "**" + "-" * 30
-        wells_name = [f'\'{well}\'' for well in self.get_well_aliases()]
+        wells = self.wells.prod + self.wells.inj
+        wells_name = [f'\'{well}\'' for well in wells]
         prod = "**" + "-" * 9 + " PRODUCERS " + "-" * 10
-        alter_prod = f'*ALTER {" ".join(wells_name[:self.num_producers])}'
+        alter_prod = f'*ALTER {" ".join(wells_name[:self.numb_prod])}'
         inj = "**" + "-" * 9 + " INJECTORS " + "-" * 10
-        alter_inj = f'*ALTER {" ".join(wells_name[self.num_producers:])}'
-        prod_controls = self._wells_rate(control[:self.num_producers])
-        inj_controls = self._wells_rate(control[self.num_producers:])
+        alter_inj = f'*ALTER {" ".join(wells_name[self.numb_prod:])}'
+        prod_controls = self._wells_rate(control[:self.numb_prod])
+        inj_controls = self._wells_rate(control[self.numb_prod:])
         lines = [div, prod, alter_prod, prod_controls,
                  div, inj, alter_inj, inj_controls, div]
         return "\n".join(lines)
+
+    @property
+    def _wells_operate_bounds(self):
+        return np.hstack((self.wells.prod_operate, self.wells.inj_operate))
+
+    def _delta_well_operate(self):
+        return self._wells_operate_bounds[0, :] - self._wells_operate_bounds[1,:]
+
+    def _get_scaled_controls(self, controls):
+        controls_per_cycle = np.split(controls, self.opt.numb_cic)
+        delta_control = self._delta_well_operate()
+        min_control = self._wells_operate_bounds[1,:]
+        return [min_control + delta_control * control
+                        for control in controls_per_cycle]
 
     def _wells_alter_strings(self):
         return [self._control_alter_strings(control) for control in self.scaled_controls]
@@ -70,49 +124,35 @@ class PyMEX(ImexTools):
         """Replace control tag <PyMEX>alter_wells</PyMEX>
         in cronograma_file.
         """
-        with open(self.schedule, "r+", encoding='UTF-8') as file:
+        with open(self.model.tpl_schedule, "r+", encoding='UTF-8') as file:
             content = file.read()
             pattern = re.compile(r"<PyMEX>ALTER_WELLS</PyMEX>")
             controls = self._wells_alter_strings()
             for control in controls:
                 content = pattern.sub(control, content, count=1)
 
-        with open(self.schedule, "w", encoding='UTF-8') as file:
+        with open(self.model.basename.schedule, "w", encoding='UTF-8') as file:
             file.write(content)
-
-    @staticmethod
-    def _sub_include_path_file(text: str):
-        return re.sub(r'INCLUDE\s+\'(.*)\'', r"INCLUDE '..\\\1'", text, flags=re.M)
-
-    # def create_well_operation(self):
-    #     """Create a include file (.inc) to be incorporated to the .dat.
-    #     Wrap the design variables in separated control cycles
-    #     if the problem is time variable,
-    #     so the last list corresponds to these.
-    #     new_controls = list(chunks(design_controls, npp + npi))
-    #     """
-    #     with open(self.reservoir_tpl, "r", encoding='UTF-8') as tpl,\
-    #             open(self.basename.dat, "w", encoding='UTF-8') as dat:
-    #         template_content = tpl.read()
-    #         # template_content = self._sub_include_path_file(template_content)
-    #         self._modify_cronograma_file()
 
     def write_dat_file(self):
         """Copy dat file to run path."""
-        with open(self.reservoir_tpl, "r", encoding='UTF-8') as tpl:
-            content = Template(tpl.read())
-        with open(self.basename.dat, "w", encoding='UTF-8') as dat:
+        with open(self.model.tpl, "r", encoding='UTF-8') as tpl:
+            content = re.sub(r'\*?INCLUDE\s+\'', r"INCLUDE '..//", tpl.read(), flags=re.S)
+            content = Template(content)
+        with open(self.model.basename.dat, "w", encoding='UTF-8') as dat:
             if self.realization:
-                content = content.substitute(N1=self.realization)
+                content = content.substitute(N1=self.realization,
+                                             SCHEDULE=f'\'{self.model.basename.schedule.name}\'')
+            else:
+                content = content.substitute(SCHEDULE=f'\'{self.model.basename.schedule.name}\'')
             dat.write(content)
 
     def rwd_file(self):
         """create *.rwd (output conditions) from report.tmpl."""
-        tpl_report = Path('res_pymex/TemplateReport.tpl')
-        with open(tpl_report, "r", encoding='UTF-8') as tmpl, \
-                open(self.basename.rwd, "w", encoding='UTF-8') as rwd:
+        with open(self.model.tpl_report, "r", encoding='UTF-8') as tmpl, \
+                open(self.model.basename.rwd, "w", encoding='UTF-8') as rwd:
             tpl = Template(tmpl.read())
-            content = tpl.substitute(SR3FILE=self.basename.sr3.name)
+            content = tpl.substitute(SR3FILE=self.model.basename.sr3.name)
             rwd.write(content)
 
     @classmethod
@@ -132,19 +172,18 @@ class PyMEX(ImexTools):
     def run_imex(self):
         """call IMEX + Results Report."""
         # self.create_well_operation()
-        if not hasattr(self, "cmginfo"):
-            self.cmginfo = self.get_cmginfo()
+        self.model.temp_run.mkdir(parents=True, exist_ok=True)
         self.write_dat_file()
-        self.copy_to()
+        # self.copy_to()
         self._modify_cronograma_file()
         self.rwd_file()
         try:
             logging.debug('Run IMEX...')
-            with open(self.basename.log, 'w', encoding='UTF-8') as log:
+            with open(self.model.basename.log, 'w', encoding='UTF-8') as log:
                 sim_command = [self.cmginfo.sim_exe, "-f",
-                                self.basename.dat.absolute(), "-wait", "-dd"]
-                if self.cfg['num_cores_parasol'] > 1:
-                    sim_command += ["-parasol", str(self.cfg['num_cores_parasol']), "-doms"]
+                                self.model.basename.dat.absolute(), "-wait", "-dd"]
+                if self.opt.parasol > 1:
+                    sim_command += ["-parasol", str(self.opt.parasol), "-doms"]
                 self.procedure = subprocess.run(sim_command, stdout=log, check=True)
         except subprocess.CalledProcessError as error:
             sys.exit(
@@ -152,10 +191,10 @@ class PyMEX(ImexTools):
 
     def read_rwo_file(self):
         """Read output file (rwo) and build the production dataframe."""
-        with open(self.basename.rwo, 'r+', encoding='UTF-8') as rwo:
-            self.prod = pd.read_csv(rwo, sep="\t", index_col=False,
+        with open(self.model.basename.rwo, 'r+', encoding='UTF-8') as rwo:
+            self.production = pd.read_csv(rwo, sep="\t", index_col=False,
                                     usecols=np.r_[:5], skiprows=np.r_[0, 1, 3:6])
-            self.prod = self.prod.rename(
+            self.production = self.production.rename(
                 columns={
                     'TIME': 'time',
                     'Period Oil Production - Monthly SC': "oil_prod",
@@ -171,14 +210,14 @@ class PyMEX(ImexTools):
             logging.debug('Run Results Report...')
             report_command = [self.cmginfo.report_exe,
                             '-f',
-                            self.basename.rwd.name,
+                            self.model.basename.rwd.name,
                             '-o',
-                            self.basename.rwo.name]
+                            self.model.basename.rwo.name]
             self.procedure = subprocess.run(
                 report_command,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
-                cwd=self.basename.dat.parent,
+                cwd=self.model.basename.dat.parent,
                 shell=True,
                 check=True
             )
@@ -196,9 +235,9 @@ class PyMEX(ImexTools):
     def npv(self):
         """ Calculate the net present value of the \
             reservoir production"""
-        if self.prod is None:
+        if self.production is None:
             self.base_run()
-        periodic_rate = ((1 + self.cfg['tma']) ** (1 / 365)) - 1
+        periodic_rate = ((1 + self.cfg['tma']) ** (1 / 365.25)) - 1
         cash_flows = self.cash_flow(self.cfg['prices']).to_numpy()
         time = self.prod["time"].to_numpy()
         tax = 1 / np.power((1 + periodic_rate), time)
@@ -209,7 +248,7 @@ class PyMEX(ImexTools):
         Run Imex.
         """
         logging.debug('## Inicialized PyMEX... ')
-        self.temp_run.mkdir(parents=True, exist_ok=True)
+        self.model.temp_run.mkdir(parents=True, exist_ok=True)
         self.run_imex()
         self.run_report_results()
         self.read_rwo_file()
@@ -217,15 +256,9 @@ class PyMEX(ImexTools):
 
     def clean_up(self):
         """ Clean files from run path."""
-        logging.debug(f'Deleting {self.basename.dat.parent} folder...')
-        if self.cfg['clean_up_results'] is True:
-            shutil.rmtree(self.basename.dat.parent)
-        elif self.cfg['clean_up_results'].lower() == 'keep_sr3':
-            for item in os.scandir(self.basename.dat.parent):
-                if item.is_dir():
-                    shutil.rmtree(item)
-                elif item.is_file() and not item.name.endswith(".sr3"):
-                    os.remove(item)
+        logging.debug(f'Deleting {self.model.basename.dat.stem}')
+        for file in self.model.basename:
+            file.unlink(missing_ok=True)
 
     def get_realization(self, content, model_number):
         """Replace $N1 for model number in TPL dat."""
@@ -254,6 +287,7 @@ class PyMEX(ImexTools):
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(src, dst)
 
+<<<<<<< HEAD
     # def _control_time(self):
     #     """Define control time."""
     #     time_conc = self.res_param["time_concession"]
@@ -262,3 +296,16 @@ class PyMEX(ImexTools):
     #     id_sort = np.searchsorted(times, control_time)
     #     times = np.unique(np.insert(times, id_sort, control_time))
     #     return control_time, times
+=======
+    @property
+    def numb_prod(self):
+        return len(self.wells.prod)
+
+    @property
+    def numb_inj(self):
+        return len(self.wells.inj)
+
+    @property
+    def num_wells(self):
+        return self.numb_prod + self.numb_inj
+>>>>>>> dev
