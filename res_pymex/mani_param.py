@@ -55,28 +55,35 @@ class PyMEX:
     @staticmethod
     def _import_model(data_yaml):
         new_model = Model()
-        new_model.tpl = Path(data_yaml['tpl'])
+        data_yaml = data_yaml['model']
+        new_model.tpl = Path(data_yaml['dat_tpl'])
         new_model.temp_run = new_model.tpl.parent / 'temp_run'
         new_model.basename = cmgfile(new_model.temp_run / new_model.tpl.name)
-        new_model.tpl_report = Path(data_yaml['tpl_report'])
-        new_model.tpl_schedule = Path(data_yaml['schedule'])
+        new_model.tpl_report = Path(data_yaml['report_tpl'])
+        new_model.tpl_schedule = Path(data_yaml['schedule_tpl'])
         return new_model
 
     @staticmethod
     def _import_wells_operate(data_yaml):
         new_well = Wells()
-        new_well.control_type = data_yaml['control_type']
-        new_well.prod = data_yaml['prod_names']
-        new_well.prod_operate = np.array([data_yaml['max_prod'], data_yaml['min_prod']], np.float64)
-        new_well.inj = data_yaml['inj_names']
-        new_well.inj_operate = np.array([data_yaml['max_inj'], data_yaml['min_inj']], np.float64)
-        new_well.max_plat = np.array(data_yaml['max_plat'])
+        new_well.control_type = data_yaml['wells']['control_type']
+        #Producers
+        prod_yaml = data_yaml['wells']['producers']
+        new_well.prod = prod_yaml['names']
+        new_well.prod_operate = np.array([prod_yaml['max_operation'], prod_yaml['min_operation']], np.float64)
+        #Injectors
+        inj_yaml = data_yaml['wells']['injectors']
+        new_well.inj = inj_yaml['inj_names']
+        new_well.inj_operate = np.array([inj_yaml['max_operation'], inj_yaml['min_operation']], np.float64)
+        #Constraints
+        new_well.max_plat = np.array(data_yaml['constraint']['platform']['prod_max_slt'])
         return new_well
 
     @staticmethod
     def _import_opt_settings(data_yaml):
         new_opt = Optimization()
-        new_opt.numb_cic = int(data_yaml['numb_cic'])
+        data_yaml = data_yaml['optimization']
+        new_opt.numb_cic = int(data_yaml['nb_cycles'])
         new_opt.tma = data_yaml['tma']
         new_opt.prices = data_yaml['prices']
         new_opt.parasol = data_yaml['num_cores_parasol']
@@ -86,7 +93,7 @@ class PyMEX:
     @staticmethod
     def _wells_rate(well_prod):
         """Return the string of the wells rate."""
-        prod_values = map(str, np.round(well_prod, 4))
+        prod_values = map(str, np.round(well_prod, 5))
         return '\t' + " ".join(prod_values)
 
     def _control_alter_strings(self, control):

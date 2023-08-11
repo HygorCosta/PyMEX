@@ -1,0 +1,32 @@
+# Reservoir Simulation settings.
+
+## MODEL
+model:
+  dat_tpl: 'PATH/TO/DAT/DAT_TPL'
+  schedule_tpl: 'PATH/TO/SCHEDULE_TPL'
+  report_tpl: 'PATH/TO/REPORT_TPL'
+
+## WELLS
+wells:
+  control_type: 'BHP'
+  producers:
+    names: ['P1', 'P2', 'P3', 'P4']
+    max_operation: [900, 900, 900, 900]
+    min_operation: [200, 200, 200, 200]
+  injectors:
+    names: ['I1', 'I2', 'I3', 'I4']
+    max_operation: [900, 900, 900, 900]
+    min_operation: [200, 200, 200, 200]
+
+# CONSTRAINTS
+constraint:
+  platform:
+      prod_max_slt: 14000
+
+# Optimization
+optimization:
+  prices: [126, 19, 6, 0]
+  nb_cycles: 3
+  tma: 0.10
+  num_cores_parasal: 5
+  clean_up_results: True
