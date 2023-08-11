@@ -11,23 +11,22 @@
 # Created: Jul 2019
 # Author: Hygor Costa
 # """
-
-import multiprocessing as mp
 from collections import namedtuple
-from pathlib import Path
+from datetime import datetime
 
-import numpy as np
-import pandas as pd
-import yaml
 
-def cmgfile(file):
+def cmgfile(file, sufix:int=None):
     """
     A simple wrapper for retrieving CMG file extensions
     given the basename.
     :param basename:
     :return:
     """
-    basename = file.parent / f'{file.stem}_{mp.current_process().pid}'
+    if sufix:
+        basename = file.parent / f'{file.stem}_{sufix:03d}'
+    else:
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        basename = file.parent / f'{file.stem}_{current_time}'
     Extension = namedtuple(
         "Extension",
         "dat out rwd rwo log sr3 schedule",
