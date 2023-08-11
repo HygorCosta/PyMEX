@@ -169,6 +169,19 @@ class PyMEX:
             raise KeyError(
                 'Verifique se a variável de ambiente CMG_HOME existe!') from error
 
+    def save_dat_file(self):
+        """Only generates the dat file and schedule include."""
+        self.model.temp_run.mkdir(parents=True, exist_ok=True)
+        self.write_dat_file()
+        self._modify_cronograma_file()
+
+    def process_and_get_npv(self):
+        """Takes the sr3 file and calculate the npv"""
+        self.run_report_results()
+        self.read_rwo_file()
+        self.clean_up()
+        return self.npv()
+
     def run_imex(self):
         """call IMEX + Results Report."""
         # self.create_well_operation()
@@ -235,8 +248,6 @@ class PyMEX:
     def npv(self):
         """ Calculate the net present value of the \
             reservoir production"""
-        if self.production is None:
-            self.base_run()
         periodic_rate = ((1 + self.cfg['tma']) ** (1 / 365.25)) - 1
         cash_flows = self.cash_flow(self.cfg['prices']).to_numpy()
         time = self.prod["time"].to_numpy()
@@ -287,16 +298,6 @@ class PyMEX:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(src, dst)
 
-<<<<<<< HEAD
-    # def _control_time(self):
-    #     """Define control time."""
-    #     time_conc = self.res_param["time_concession"]
-    #     times = np.linspace(0, time_conc, int(time_conc / 30) + 1, dtype=int)
-    #     control_time = np.round(self.time_steps()[:-1])
-    #     id_sort = np.searchsorted(times, control_time)
-    #     times = np.unique(np.insert(times, id_sort, control_time))
-    #     return control_time, times
-=======
     @property
     def numb_prod(self):
         return len(self.wells.prod)
@@ -308,4 +309,3 @@ class PyMEX:
     @property
     def num_wells(self):
         return self.numb_prod + self.numb_inj
->>>>>>> dev
