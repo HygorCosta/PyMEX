@@ -15,18 +15,18 @@ from collections import namedtuple
 from datetime import datetime
 
 
-def cmgfile(file, sufix:int=None):
+def cmgfile(basename):
     """
     A simple wrapper for retrieving CMG file extensions
     given the basename.
     :param basename:
     :return:
     """
-    if sufix:
-        basename = file.parent / f'{file.stem}_{sufix:03d}'
-    else:
-        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        basename = file.parent / f'{file.stem}_{current_time}'
+    # if sufix:
+    #     basename = file.parent / f'{file.stem}_{sufix:03d}'
+    # else:
+    #     current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #     basename = file.parent / f'{file.stem}_{current_time}'
     Extension = namedtuple(
         "Extension",
         "dat out rwd rwo log sr3 schedule",
