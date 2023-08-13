@@ -12,8 +12,6 @@
 # Author: Hygor Costa
 # """
 from collections import namedtuple
-from datetime import datetime
-
 
 def cmgfile(basename):
     """

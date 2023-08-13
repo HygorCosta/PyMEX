@@ -10,13 +10,13 @@ model:
 wells:
   control_type: 'BHP'
   producers:
-    names: ['P1', 'P2', 'P3', 'P4']
-    max_operation: [900, 900, 900, 900]
-    min_operation: [200, 200, 200, 200]
+    names: ['P1','P2','P3','P4']
+    max_operation: [900,900,900,900]
+    min_operation: [200,200,200,200]
   injectors:
-    names: ['I1', 'I2', 'I3', 'I4']
-    max_operation: [900, 900, 900, 900]
-    min_operation: [200, 200, 200, 200]
+    names: ['I1','I2','I3','I4']
+    max_operation: [900,900,900,900]
+    min_operation: [200,200,200,200]
 
 # CONSTRAINTS
 constraint:
@@ -28,5 +28,12 @@ optimization:
   prices: [126, 19, 6, 0]
   nb_cycles: 3
   tma: 0.10
-  num_cores_parasal: 5
+  num_cores_parasol: 5
+  num_sim: 5
   clean_up_results: True
+  sao:
+    delta: 0.2
+    ite_max: 50
+    ite_max_sao: 20
+    tol_opt: 1e-4
+    tol_delta: 1e-4

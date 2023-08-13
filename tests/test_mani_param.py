@@ -1,9 +1,7 @@
 """ Test Mani Param - PyMEX Class"""
 import os
-from unittest import mock
 from pathlib import Path
 
-import pandas as pd
 import pytest
 import numpy as np
 
@@ -14,13 +12,32 @@ from res_pymex.mani_param import PyMEX
 def pymex_olymp():
     """Create instance of Pymex to test.
     """
-    controls = [1] * 36
-    return PyMEX('model/OLYMPUS/config_olympus.yaml', np.array(controls), 44)
+    controls_1 = [0] * 11 + [1] * 7
+    controls_2 = [0] * 11 + [1] * 7
+    controls_3 = [0] * 11 + [1] * 7
+    controls = controls_1 + controls_2 + controls_3
+    model = PyMEX('./model/olympus_config.yaml')
+    model.controls = np.array(controls)
+    model.realization = 44
+    return model
 
 def test_inicializar_classe(olymp: PyMEX):
-    assert olymp.realization == None
-    assert olymp.production == None
-    assert isinstance(olymp.model.tpl, Path)
+    """Testar a inicialização da classe"""
+    assert olymp.model is not None
+    assert olymp.wells is not None
+    assert olymp.opt is not None
+    assert hasattr(olymp.cmginfo, 'home_path')
+    assert hasattr(olymp.cmginfo, 'sim_exe')
+    assert hasattr(olymp.cmginfo, 'report_exe')
+    assert len(olymp.controls) == 3
+    assert olymp.controls[0].shape == (18,)
+    assert olymp.realization == 44
+    assert olymp.production is None
+
+def test_write_sheduling(olymp):
+    """Test write scheduling string """
+    scheduling = olymp._write_scheduling()
+    assert isinstance(scheduling, str)
 
 def test_imex_run_path_is_correct_find(olymp: PyMEX):
     """Verifica se o arquivo executável do IMEX foi
@@ -29,35 +46,60 @@ def test_imex_run_path_is_correct_find(olymp: PyMEX):
     esperado = Path(r'C:\Program Files\CMG\IMEX\2022.10\Win_x64\EXE\mx202210.exe')
     assert esperado.samefile(olymp.cmginfo.sim_exe)
 
-def test_imex_return_code_is_zero(olymp: PyMEX):
-    """Check if the imex actually run and return code was zero."""
-    olymp.base_run()
-    assert olymp.procedure.returncode == 0
+def test_write_dat_file(olymp):
+    """Test if the modified datafile is created."""
+    olymp.write_dat_file()
+    assert os.path.isfile(olymp.model.basename.dat)
 
-def test_run_results_report_return_pandas_production(olymp: PyMEX):
-    """Teste if production is not none.
-    """
-    procedure = mock.MagicMock()
-    procedure.returncode = 0
-    olymp.run_report_results(procedure)
-    assert pymex.prod is not None
+def test_write_dat_file_with_new_basename(olymp):
+    """Test if the modified datafile is created
+    with a new basename."""
+    i = 3
+    olymp.basename = f'Opt_{i:03d}'
+    olymp.write_dat_file()
+    assert os.path.isfile(olymp.model.basename.dat)
 
-def test_cash_flow_was_created(olymp: PyMEX):
-    """Test if clashflow was created and if is a pandas Series.
-    """
-    olymp.prod = pd.read_csv('producao.csv')
-    cash_flow = olymp.cash_flow()
-    assert len(cash_flow) == 361
-    assert isinstance(cash_flow, pd.Series)
+def test_write_dat_file_with_new_basename_and_run_imex(olymp):
+    """Test if the modified datafile is created
+    with a new basename."""
+    i = 3
+    olymp.basename = f'Opt_{i:03d}'
+    olymp.write_dat_file()
+    assert olymp.run_imex()
 
-def test_npv_is_greater_than_zero(olymp: PyMEX):
-    """Test if vpl is positive by default.
-    """
-    olymp.prod = pd.read_csv('producao.csv')
-    olymp.net_present_value()
-    assert isinstance(olymp.npv, float)
-    assert olymp.npv > 0
+def test_write_rwd_file(olymp):
+    """Test if the modified datafile is created
+    with a new basename."""
+    i = 2
+    olymp.basename = f'Opt_{i:03d}'
+    olymp.rwd_file()
+    assert os.path.isfile(olymp.model.basename.rwd)
 
+def test_run_report(olymp):
+    """Test if the modified datafile is created
+    with a new basename."""
+    i = 3
+    olymp.basename = f'Opt_{i:03d}'
+    olymp.rwd_file()
+    olymp.run_report_results()
+    assert os.path.isfile(olymp.model.basename.rwo)
+
+def test_read_rwo(olymp):
+    """Test if the modified datafile is created
+    with a new basename."""
+    i = 2
+    olymp.basename = f'Opt_{i:03d}'
+    olymp.read_rwo_file()
+    assert olymp.production is not None
+
+def test_npv_greather_then_zero(olymp):
+    """Test if the modified datafile is created
+    with a new basename."""
+    i = 3
+    olymp.basename = f'Opt_{i:03d}'
+    olymp.read_rwo_file()
+    npv = olymp.npv()
+    assert npv > 0
 
 def test_clean_up(olymp: PyMEX):
     """Test if clean up temporary works is working.
@@ -70,46 +112,8 @@ def test_clean_up(olymp: PyMEX):
     assert os.path.exists(olymp.basename.rwd) is False
     assert os.path.exists(olymp.basename.log) is False
 
-def test_sub_include_path_file(olymp: PyMEX):
-    """Test file include path manipulation."""
-    texto = r"""
-        GRID CORNER 163 98 7
-
-    INCLUDE 'INCLUDE/corners.inc'
-    INCLUDE 'INCLUDE/ntg.inc'
-    INCLUDE 'INCLUDE/por.inc'
-    INCLUDE 'INCLUDE/permi.inc'
-    PERMJ  EQUALSI
-    INCLUDE 'INCLUDE/permk.inc'
-    INCLUDE 'INCLUDE/null.inc'
-    INCLUDE 'INCLUDE/falhas.inc'
-    INCLUDE 'INCLUDE/pinchout.inc'
-
-
-    CPOR 130E-6
-    PRPOR 272.95"""
-    obtido = olymp._sub_include_path_file(texto)
-    assert isinstance(obtido, str)
-
-
-def test_create_well_operation(olymp: PyMEX):
-    price = np.array([70, -2, -2, -2])
-    tma = 0.1
-    obtido = olymp.npv(price, tma)
-    assert obtido > 0
-    assert isinstance(obtido, float)
-
-
-def test_scaled_controls(olymp: PyMEX):
-    assert len(olymp.scaled_controls[0]) == 18
-    assert len(olymp.scaled_controls) == 2
-
 def test_run(olymp: PyMEX):
     obtido = olymp.npv()
-    assert obtido != 0
-
-def test_run_olympus_write_dat_file(olymp: PyMEX):
-    obtido = olymp.write_dat_file()
     assert obtido != 0
 
 def test_run_olympus_copy_to(olymp: PyMEX):
