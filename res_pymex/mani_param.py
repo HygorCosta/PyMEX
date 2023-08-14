@@ -108,10 +108,10 @@ class PyMEX:
         wells = self.wells.prod + self.wells.inj
         target = ['** Inserted by PyMEX', div]
         for well, control in zip(wells, controls):
-           bhp =  f'*TARGET {self.wells.control_type}\n'
-           name_well = f'\t\'{well}\'\n'
-           value = f'\t{round(control,5)}\n'
-           target.append(bhp + name_well + value)
+            bhp =  f'*TARGET {self.wells.control_type}\n'
+            name_well = f'\t\'{well}\'\n'
+            value = f'\t{round(control,5)}\n'
+            target.append(bhp + name_well + value)
         target.append(div)
         return "\n".join(target)
 
