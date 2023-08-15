@@ -14,7 +14,6 @@ import logging
 import os
 import re
 import sys
-import math
 from pathlib import Path
 import subprocess
 from string import Template
@@ -23,85 +22,24 @@ from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
 import yaml
-from .settings import Model, Wells, Optimization
+from .settings import Settings
 from .imex_tools import cmgfile
-
 
 logging.basicConfig(format='%(process)d-%(message)s')
 
 
-class PyMEX:
+class PyMEX(Settings):
     """
     Manipulate the files give in.
     """
     __cmginfo = namedtuple("cmginfo", "home_path sim_exe report_exe")
 
     def __init__(self, reservoir_config:yaml):
-        self.import_settings(reservoir_config)
+        super().__init__(reservoir_config)
         self.cmginfo = self.get_cmginfo()
         self._controls = None
         self._realization = None
         self._production = None
-
-    def import_settings(self, config_yaml):
-        """Import reservoir and optimization settings.
-        Example in config folder.
-
-        Args:
-            config_yaml (str): yaml file
-        """
-        with open(config_yaml, "r", encoding='UTF-8') as yamlfile:
-            data = yaml.load(yamlfile, Loader=yaml.FullLoader)
-            self.model = self._import_model(data)
-            self.wells = self._import_wells_operate(data)
-            self.opt = self._import_opt_settings(data)
-
-    @staticmethod
-    def _import_model(data_yaml):
-        new_model = Model()
-        data_yaml = data_yaml['model']
-        new_model.tpl = Path(data_yaml['dat_tpl'])
-        new_model.temp_run = new_model.tpl.parent / 'temp_run'
-        new_model.basename = cmgfile(new_model.temp_run / new_model.tpl.name)
-        new_model.tpl_report = Path(data_yaml['report_tpl'])
-        return new_model
-
-    @staticmethod
-    def _import_wells_operate(data_yaml):
-        new_well = Wells()
-        new_well.control_type = data_yaml['wells']['control_type']
-        #Producers
-        prod_yaml = data_yaml['wells']['producers']
-        new_well.prod = prod_yaml['names']
-        new_well.prod_operate = np.array([prod_yaml['max_operation'], prod_yaml['min_operation']],
-                                          np.float64)
-        #Injectors
-        inj_yaml = data_yaml['wells']['injectors']
-        new_well.inj = inj_yaml['names']
-        new_well.inj_operate = np.array([inj_yaml['max_operation'], inj_yaml['min_operation']],
-                                         np.float64)
-        #Constraints
-        new_well.max_plat = np.array(data_yaml['constraint']['platform']['prod_max_slt'])
-        return new_well
-
-    @staticmethod
-    def _import_opt_settings(data_yaml):
-        new_opt = Optimization()
-        data_yaml = data_yaml['optimization']
-        new_opt.dates = data_yaml['dates']
-        new_opt.numb_cic = math.ceil(12*new_opt.dates['conc']/new_opt.dates['step_control'])
-        new_opt.tma = data_yaml['tma']
-        new_opt.prices = data_yaml['prices']
-        new_opt.parasol = data_yaml['num_cores_parasol']
-        new_opt.clean_files = data_yaml['clean_up_results']
-        new_opt.sao = data_yaml['sao']
-        return new_opt
-
-    @staticmethod
-    def _wells_rate(well_prod):
-        """Return the string of the wells rate."""
-        prod_values = map(str, np.round(well_prod, 5))
-        return '\t' + " ".join(prod_values)
 
     def _control_alter_strings(self, controls):
         div = "**" + "-" * 30
@@ -160,20 +98,6 @@ class PyMEX:
         min_control = self._wells_operate_bounds[1,:]
         return [min_control + delta_control * control
                         for control in controls_per_cycle]
-
-    # def _modify_cronograma_file(self):
-    #     """Replace control tag <PyMEX>alter_wells</PyMEX>
-    #     in cronograma_file.
-    #     """
-    #     with open(self.model.tpl_schedule, "r+", encoding='UTF-8') as file:
-    #         content = file.read()
-    #         pattern = re.compile(r"<PyMEX>ALTER_WELLS</PyMEX>")
-    #         controls = [self._control_alter_strings(control) for control in self._controls]
-    #         for control in controls:
-    #             content = pattern.sub(control, content, count=1)
-
-    #     with open(self.model.basename.schedule, "w", encoding='UTF-8') as file:
-    #         file.write(content)
 
     def _write_scheduling(self) -> str:
         start = self.opt.dates['start']
