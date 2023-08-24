@@ -124,9 +124,11 @@ class PyMEX(Settings):
                 schedule.append(f'*DATE {date.strftime("%Y %m %d")}.1\n')
         return '\n'.join(schedule)
 
-    def write_dat_file(self):
+    def write_dat_file(self, control:np.ndarray=None):
         """Copy dat file to run path."""
         self.model.temp_run.mkdir(parents=True, exist_ok=True)
+        if control:
+            self.controls = control
         with open(self.model.tpl, "r", encoding='UTF-8') as tpl:
             content = re.sub(r'\*?INCLUDE\s+\'', r"INCLUDE '../", tpl.read(), flags=re.S)
             content = Template(content)

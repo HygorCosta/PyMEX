@@ -1,0 +1,32 @@
+{
+    "model":{
+        "dat_tpl": "./model/OLYMPUS_BHP_noWC.tpl",
+        "report_tpl": "./model/TemplateReport.tpl"
+    },
+    "wells":{
+        "control_type": "BHP",
+        "producers":{
+            "names": ["PROD-1","PROD-2","PROD-3","PROD-4","PROD-5","PROD-6","PROD-7","PROD-8","PROD-9","PROD-10","PROD-11"],
+            "max": [23500,23500,23500,23500,23500,23500,23500,23500,23500,23500,23500],
+            "min": [15000,15000,15000,15000,15000,15000,15000,15000,15000,15000,15000]
+        },
+        "injectors":{
+            "names": ["INJ-1","INJ-2","INJ-3","INJ-4","INJ-5","INJ-6","INJ-7"],
+            "max": [23500,23500,23500,23500,23500,23500,23500],
+            "min": [15000,15000,15000,15000,15000,15000,15000]
+        }
+    },
+    "constraint":{
+        "platform":{
+            "max_slt": 1400
+        }
+    },
+    "optimization":{
+        "dates":{
+            "start": "2016-01-01",
+            "conc": 20,
+            "step_control": 84,
+            "write_freq|": 3
+        }
+    }
+}
