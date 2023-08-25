@@ -1,5 +1,6 @@
 """ Test Mani Param - PyMEX Class"""
 import os
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -120,3 +121,23 @@ def test_run_olympus_copy_to(olymp: PyMEX):
     olymp.write_dat_file()
     olymp.copy_to()
     assert 1
+
+def test_write_multiple_async_files(olymp):
+    controls = np.ones((10, 54))
+    realizations = 5*[5, 44]
+    names = [f'Opt_{i:03d}' for i in range(1, 11)]
+    asyncio.run(
+        olymp.write_multiple_realization_files(
+            names, controls, realizations
+        )
+    )
+    assert os.path.isfile('model/temp_run/Opt_001.dat')
+    assert os.path.isfile('model/temp_run/Opt_002.dat')
+    assert os.path.isfile('model/temp_run/Opt_003.dat')
+    assert os.path.isfile('model/temp_run/Opt_004.dat')
+    assert os.path.isfile('model/temp_run/Opt_005.dat')
+    assert os.path.isfile('model/temp_run/Opt_006.dat')
+    assert os.path.isfile('model/temp_run/Opt_007.dat')
+    assert os.path.isfile('model/temp_run/Opt_008.dat')
+    assert os.path.isfile('model/temp_run/Opt_009.dat')
+    assert os.path.isfile('model/temp_run/Opt_010.dat')

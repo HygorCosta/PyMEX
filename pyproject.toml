@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "res-pymex"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = ["HYGOR VINICIUS COSTA SILVA <hygorvcosta@gmail.com>"]
 readme = "README.md"
@@ -16,6 +16,7 @@ h5py = "^3.9.0"
 xarray = "^2023.6.0"
 python-dateutil = "^2.8.2"
 pyaml = "^23.7.0"
+aiofiles = "^23.2.1"
 
 
 [tool.poetry.group.dev.dependencies]

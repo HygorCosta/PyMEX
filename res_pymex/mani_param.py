@@ -16,8 +16,11 @@ import re
 import sys
 from pathlib import Path
 import subprocess
+from typing import List
 from string import Template
 from collections import namedtuple
+import asyncio
+import aiofiles
 from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
@@ -37,6 +40,9 @@ class PyMEX(Settings):
     def __init__(self, reservoir_config:yaml):
         super().__init__(reservoir_config)
         self.cmginfo = self.get_cmginfo()
+        self._tpl_model = self._read_tpl_model()
+        self._tpl_rwd = self._read_rwd_tpl()
+        self.model.temp_run.mkdir(parents=True, exist_ok=True)
         self._controls = None
         self._realization = None
         self._production = None
@@ -124,28 +130,57 @@ class PyMEX(Settings):
                 schedule.append(f'*DATE {date.strftime("%Y %m %d")}.1\n')
         return '\n'.join(schedule)
 
-    def write_dat_file(self, control:np.ndarray=None):
-        """Copy dat file to run path."""
-        self.model.temp_run.mkdir(parents=True, exist_ok=True)
-        if control:
-            self.controls = control
+    def _read_tpl_model(self):
+        """Read template model"""
         with open(self.model.tpl, "r", encoding='UTF-8') as tpl:
             content = re.sub(r'\*?INCLUDE\s+\'', r"INCLUDE '../", tpl.read(), flags=re.S)
-            content = Template(content)
+            return Template(content)
+
+    async def _write_dat_async(self, filename, content):
+        async with aiofiles.open(filename, 'w+', encoding='utf-8') as dat:
+            await dat.write(content)
+
+    async def write_multiple_realization_files(self,
+                                                basenames:List[str],
+                                                controls:np.ndarray,
+                                                realizations:List[int]):
+        """Write one dat file for each control in controls list."""
+        tasks = []
+        for basename, control, realization in zip(basenames, controls, realizations):
+            self.basename = basename
+            self.controls = control
+            self.realization = realization
+            content = self._tpl_model.substitute(N1=self._realization,
+                                            SCHEDULE=self._write_scheduling())
+            tasks.append(
+                asyncio.ensure_future(
+                self._write_dat_async(self.model.basename.dat, content)
+                )
+            )
+        await asyncio.gather(*tasks)
+
+    def write_dat_file(self, control:np.ndarray=None, realization:int=None):
+        """Copy dat file to run path."""
+        if control:
+            self.controls = control
+        if realization:
+            self.realization = realization
         with open(self.model.basename.dat, "w", encoding='UTF-8') as dat:
             if self._realization:
-                content = content.substitute(N1=self._realization,
+                content = self._tpl_model.substitute(N1=self._realization,
                                              SCHEDULE=self._write_scheduling())
             else:
-                content = content.substitute(SCHEDULE=self._write_scheduling())
+                content = self._tpl_model.substitute(SCHEDULE=self._write_scheduling())
             dat.write(content)
+
+    def _read_rwd_tpl(self):
+        with open(self.model.tpl_report, 'r', encoding='utf-8') as tmpl:
+            return Template(tmpl.read())
 
     def rwd_file(self):
         """create *.rwd (output conditions) from report.tmpl."""
-        with open(self.model.tpl_report, "r", encoding='UTF-8') as tmpl, \
-                open(self.model.basename.rwd, "w", encoding='UTF-8') as rwd:
-            tpl = Template(tmpl.read())
-            content = tpl.substitute(SR3FILE=self.model.basename.sr3.name)
+        with open(self.model.basename.rwd, "w", encoding='UTF-8') as rwd:
+            content = self._tpl_rwd.substitute(SR3FILE=self.model.basename.sr3.name)
             rwd.write(content)
 
     @classmethod
