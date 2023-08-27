@@ -137,10 +137,10 @@ class PyMEX(Settings):
             return Template(content)
 
     async def _write_dat_async(self, filename, content):
-        async with aiofiles.open(filename, 'w+', encoding='utf-8') as dat:
-            await dat.write(content)
+        async with aiofiles.open(filename, 'w+', encoding='utf-8') as file:
+            await file.write(content)
 
-    async def write_multiple_realization_files(self,
+    async def write_multiple_dat_and_rwd_files(self,
                                                 basenames:List[str],
                                                 controls:np.ndarray,
                                                 realizations:List[int]):
@@ -150,11 +150,49 @@ class PyMEX(Settings):
             self.basename = basename
             self.controls = control
             self.realization = realization
-            content = self._tpl_model.substitute(N1=self._realization,
+            dat_content = self._tpl_model.substitute(N1=self._realization,
+                                            SCHEDULE=self._write_scheduling())
+            rwd_content = self._tpl_rwd.substitute(SR3FILE=self.model.basename.sr3.name)
+            tasks.append(
+                asyncio.ensure_future(
+                self._write_dat_async(self.model.basename.dat, dat_content)
+                )
+            )
+            tasks.append(
+                asyncio.ensure_future(
+                self._write_dat_async(self.model.basename.rwd, rwd_content)
+                )
+            )
+        await asyncio.gather(*tasks)
+
+    async def write_multiple_dat_files(self,
+                                                basenames:List[str],
+                                                controls:np.ndarray,
+                                                realizations:List[int]):
+        """Write one dat file for each control in controls list."""
+        tasks = []
+        for basename, control, realization in zip(basenames, controls, realizations):
+            self.basename = basename
+            self.controls = control
+            self.realization = realization
+            dat_content = self._tpl_model.substitute(N1=self._realization,
                                             SCHEDULE=self._write_scheduling())
             tasks.append(
                 asyncio.ensure_future(
-                self._write_dat_async(self.model.basename.dat, content)
+                self._write_dat_async(self.model.basename.dat, dat_content)
+                )
+            )
+        await asyncio.gather(*tasks)
+
+    async def write_multiple_rwd_files(self, basenames:List[str]):
+        """Write one rwd file for each control in list."""
+        tasks = []
+        for basename in zip(basenames):
+            self.basename = basename
+            rwd_content = self._tpl_rwd.substitute(SR3FILE=self.model.basename.sr3.name)
+            tasks.append(
+                asyncio.ensure_future(
+                self._write_dat_async(self.model.basename.rwd, rwd_content)
                 )
             )
         await asyncio.gather(*tasks)

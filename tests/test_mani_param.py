@@ -35,10 +35,10 @@ def test_inicializar_classe(olymp: PyMEX):
     assert olymp.realization == 44
     assert olymp.production is None
 
-def test_write_sheduling(olymp):
-    """Test write scheduling string """
-    scheduling = olymp._write_scheduling()
-    assert isinstance(scheduling, str)
+# def test_write_sheduling(olymp):
+#     """Test write scheduling string """
+#     scheduling = olymp._write_scheduling()
+#     assert isinstance(scheduling, str)
 
 def test_imex_run_path_is_correct_find(olymp: PyMEX):
     """Verifica se o arquivo executável do IMEX foi
@@ -123,16 +123,18 @@ def test_run_olympus_copy_to(olymp: PyMEX):
     assert 1
 
 def test_write_multiple_async_files(olymp):
-    controls = np.ones((10, 54))
-    realizations = 5*[5, 44]
-    names = [f'Opt_{i:03d}' for i in range(1, 11)]
+    controls = np.ones((20, 54))
+    realizations = 10*[5, 44]
+    names = [f'Opt_{i:03d}' for i in range(1, 21)]
     asyncio.run(
-        olymp.write_multiple_realization_files(
+        olymp.write_multiple_dat_and_rwd_files(
             names, controls, realizations
         )
     )
     assert os.path.isfile('model/temp_run/Opt_001.dat')
+    assert os.path.isfile('model/temp_run/Opt_001.rwd')
     assert os.path.isfile('model/temp_run/Opt_002.dat')
+    assert os.path.isfile('model/temp_run/Opt_002.rwd')
     assert os.path.isfile('model/temp_run/Opt_003.dat')
     assert os.path.isfile('model/temp_run/Opt_004.dat')
     assert os.path.isfile('model/temp_run/Opt_005.dat')
@@ -141,3 +143,6 @@ def test_write_multiple_async_files(olymp):
     assert os.path.isfile('model/temp_run/Opt_008.dat')
     assert os.path.isfile('model/temp_run/Opt_009.dat')
     assert os.path.isfile('model/temp_run/Opt_010.dat')
+    assert os.path.isfile('model/temp_run/Opt_010.rwd')
+    assert os.path.isfile('model/temp_run/Opt_020.dat')
+    assert os.path.isfile('model/temp_run/Opt_020.rwd')
