@@ -146,3 +146,21 @@ def test_write_multiple_async_files(olymp):
     assert os.path.isfile('model/temp_run/Opt_010.rwd')
     assert os.path.isfile('model/temp_run/Opt_020.dat')
     assert os.path.isfile('model/temp_run/Opt_020.rwd')
+
+def test_results_report(olymp):
+    """Async results report execution"""
+    base = olymp.model.temp_run / 'ResOpt'
+    basenames = [f'{base}_{i:04d}' for i in range(1, 21)]
+    results = asyncio.run(
+        olymp.assync_results_report(basenames)
+    )
+    # olymp._results_report(basenames)
+    assert results[0].stdout is not None
+
+def test_assync_results_report(olymp):
+    """Async results report execution"""
+    base = olymp.model.temp_run / 'ResOpt'
+    basenames = [f'{base}_{i:04d}' for i in range(1, 51)]
+    olymp.parallel_results_report(basenames)
+    # olymp._results_report(basenames)
+    assert 1

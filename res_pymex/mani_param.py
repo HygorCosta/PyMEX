@@ -143,26 +143,44 @@ class PyMEX(Settings):
     async def write_multiple_dat_and_rwd_files(self,
                                                 basenames:List[str],
                                                 controls:np.ndarray,
-                                                realizations:List[int]):
+                                                realizations:List[int]=None):
         """Write one dat file for each control in controls list."""
         tasks = []
-        for basename, control, realization in zip(basenames, controls, realizations):
-            self.basename = basename
-            self.controls = control
-            self.realization = realization
-            dat_content = self._tpl_model.substitute(N1=self._realization,
-                                            SCHEDULE=self._write_scheduling())
-            rwd_content = self._tpl_rwd.substitute(SR3FILE=self.model.basename.sr3.name)
-            tasks.append(
-                asyncio.ensure_future(
-                self._write_dat_async(self.model.basename.dat, dat_content)
+        if realizations is not None:
+            for basename, control, realization in zip(basenames, controls, realizations):
+                self.basename = basename
+                self.controls = control
+                self.realization = realization
+                dat_content = self._tpl_model.substitute(N1=self._realization,
+                                                SCHEDULE=self._write_scheduling())
+                rwd_content = self._tpl_rwd.substitute(SR3FILE=self.model.basename.sr3.name)
+                tasks.append(
+                    asyncio.ensure_future(
+                    self._write_dat_async(self.model.basename.dat, dat_content)
+                    )
                 )
-            )
-            tasks.append(
-                asyncio.ensure_future(
-                self._write_dat_async(self.model.basename.rwd, rwd_content)
+                tasks.append(
+                    asyncio.ensure_future(
+                    self._write_dat_async(self.model.basename.rwd, rwd_content)
+                    )
                 )
-            )
+        else:
+            for basename, control in zip(basenames, controls):
+                self.basename = basename
+                self.controls = control
+                self.realization = realization
+                dat_content = self._tpl_model.substitute(SCHEDULE=self._write_scheduling())
+                rwd_content = self._tpl_rwd.substitute(SR3FILE=self.model.basename.sr3.name)
+                tasks.append(
+                    asyncio.ensure_future(
+                    self._write_dat_async(self.model.basename.dat, dat_content)
+                    )
+                )
+                tasks.append(
+                    asyncio.ensure_future(
+                    self._write_dat_async(self.model.basename.rwd, rwd_content)
+                    )
+                )
         await asyncio.gather(*tasks)
 
     async def write_multiple_dat_files(self,
@@ -257,9 +275,11 @@ class PyMEX(Settings):
             sys.exit(
                 f"Error - Não foi possível executar o IMEX, verificar: {error}")
 
-    def read_rwo_file(self):
+    def read_rwo_file(self, rwo_file:str=None):
         """Read output file (rwo) and build the production dataframe."""
-        with open(self.model.basename.rwo, 'r+', encoding='UTF-8') as rwo:
+        if rwo_file is None:
+            rwo_file = self.model.basename.rwo
+        with open(rwo_file, 'r+', encoding='UTF-8') as rwo:
             self._production = pd.read_csv(rwo, sep="\t", index_col=False,
                                     usecols=np.r_[:5], skiprows=np.r_[0, 1, 3:6])
             self._production = self._production.rename(
@@ -271,6 +291,7 @@ class PyMEX(Settings):
                     'Period Water Production - Monthly SC.1': "water_inj"
                 }
             )
+            return self._production
 
     def run_report_results(self):
         """Get production for results."""
@@ -293,16 +314,18 @@ class PyMEX(Settings):
             print(f"Report não pode ser executador, verificar: {error}")
             return 1
 
-    def npv(self):
+    def npv(self, prod:pd.DataFrame=None):
         """ Calculate the net present value of the \
             reservoir production"""
+        if prod is None:
+            prod = self._production
         periodic_rate = ((1 + self.opt.tma) ** (1 / 365.25)) - 1
-        cash_flows = self._production.loc[:, ['oil_prod',
+        cash_flows = prod.loc[:, ['oil_prod',
                                        'gas_prod',
                                        'water_prod',
                                        'water_inj']
                                     ].mul(self.opt.prices).sum(axis=1).to_numpy()
-        time = self._production["time"].to_numpy()
+        time = prod["time"].to_numpy()
         tax = 1 / np.power((1 + periodic_rate), time)
         return np.sum(cash_flows * tax) * 1e-9
 
