@@ -17,6 +17,7 @@ xarray = "^2023.6.0"
 python-dateutil = "^2.8.2"
 pyaml = "^23.7.0"
 aiofiles = "^23.2.1"
+polars = "^0.19.2"
 
 
 [tool.poetry.group.dev.dependencies]

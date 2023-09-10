@@ -79,9 +79,10 @@ def test_write_rwd_file(olymp):
 def test_run_report(olymp):
     """Test if the modified datafile is created
     with a new basename."""
-    i = 3
-    olymp.basename = f'Opt_{i:03d}'
-    olymp.rwd_file()
+    i = 1
+    base = olymp.model.temp_run / 'ResOpt'
+    olymp.basename = f'{base}_{i:04d}'
+    # olymp.rwd_file()
     olymp.run_report_results()
     assert os.path.isfile(olymp.model.basename.rwo)
 
@@ -164,3 +165,10 @@ def test_assync_results_report(olymp):
     olymp.parallel_results_report(basenames)
     # olymp._results_report(basenames)
     assert 1
+
+def test_get_mult_npvs(olymp):
+    """Calculate net present value from rwo"""
+    rwo = olymp.model.temp_run / 'ResOpt'
+    rwo_files = [f'{rwo}_{i:04d}.rwo' for i in range(3, 51)]
+    dframe = olymp.get_mult_npvs(rwo_files)
+    assert len(dframe.select('pv').to_numpy()) == 48

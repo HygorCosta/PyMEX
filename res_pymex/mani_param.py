@@ -10,7 +10,6 @@
 # Created: Jul 2019
 # Author: Hygor Costa
 """
-import logging
 import os
 import re
 import sys
@@ -23,12 +22,10 @@ import asyncio
 import aiofiles
 from dateutil.relativedelta import relativedelta
 import numpy as np
-import pandas as pd
+import polars as pl
 import yaml
 from .settings import Settings
 from .imex_tools import cmgfile
-
-logging.basicConfig(format='%(process)d-%(message)s')
 
 
 class PyMEX(Settings):
@@ -215,29 +212,9 @@ class PyMEX(Settings):
             )
         await asyncio.gather(*tasks)
 
-    def write_dat_file(self, control:np.ndarray=None, realization:int=None):
-        """Copy dat file to run path."""
-        if control:
-            self.controls = control
-        if realization:
-            self.realization = realization
-        with open(self.model.basename.dat, "w", encoding='UTF-8') as dat:
-            if self._realization:
-                content = self._tpl_model.substitute(N1=self._realization,
-                                             SCHEDULE=self._write_scheduling())
-            else:
-                content = self._tpl_model.substitute(SCHEDULE=self._write_scheduling())
-            dat.write(content)
-
     def _read_rwd_tpl(self):
         with open(self.model.tpl_report, 'r', encoding='utf-8') as tmpl:
             return Template(tmpl.read())
-
-    def rwd_file(self):
-        """create *.rwd (output conditions) from report.tmpl."""
-        with open(self.model.basename.rwd, "w", encoding='UTF-8') as rwd:
-            content = self._tpl_rwd.substitute(SR3FILE=self.model.basename.sr3.name)
-            rwd.write(content)
 
     @classmethod
     def get_cmginfo(cls):
@@ -253,18 +230,10 @@ class PyMEX(Settings):
             raise KeyError(
                 'Verifique se a variável de ambiente CMG_HOME existe!') from error
 
-    def process_and_get_npv(self):
-        """Takes the sr3 file and calculate the npv"""
-        self.run_report_results()
-        self.read_rwo_file()
-        self.clean_up()
-        return self.npv()
-
-    def run_imex(self) -> int:
+    def run_local_imex(self) -> int:
         """call IMEX + Results Report."""
         # self.create_well_operation()
         try:
-            logging.info('Run IMEX...')
             with open(self.model.basename.log, 'w', encoding='UTF-8') as log:
                 sim_command = [self.cmginfo.sim_exe, "-f",
                                 self.model.basename.dat.absolute(), "-wait", "-dd"]
@@ -275,28 +244,9 @@ class PyMEX(Settings):
             sys.exit(
                 f"Error - Não foi possível executar o IMEX, verificar: {error}")
 
-    def read_rwo_file(self, rwo_file:str=None):
-        """Read output file (rwo) and build the production dataframe."""
-        if rwo_file is None:
-            rwo_file = self.model.basename.rwo
-        with open(rwo_file, 'r+', encoding='UTF-8') as rwo:
-            self._production = pd.read_csv(rwo, sep="\t", index_col=False,
-                                    usecols=np.r_[:5], skiprows=np.r_[0, 1, 3:6])
-            self._production = self._production.rename(
-                columns={
-                    'TIME': 'time',
-                    'Period Oil Production - Monthly SC': "oil_prod",
-                    'Period Gas Production - Monthly SC': "gas_prod",
-                    'Period Water Production - Monthly SC': "water_prod",
-                    'Period Water Production - Monthly SC.1': "water_inj"
-                }
-            )
-            return self._production
-
-    def run_report_results(self):
+    def run_local_report_results(self):
         """Get production for results."""
         try:
-            logging.info('Run Results Report...')
             report_command = [self.cmginfo.report_exe,
                             '-f',
                             self.model.basename.rwd.name,
@@ -314,74 +264,49 @@ class PyMEX(Settings):
             print(f"Report não pode ser executador, verificar: {error}")
             return 1
 
-    def npv(self, prod:pd.DataFrame=None):
-        """ Calculate the net present value of the \
-            reservoir production"""
-        if prod is None:
-            prod = self._production
+    def get_mult_npvs(self, rwo_files:List[str]):
+        """Retorna uma lista de valores de npv, um para cada rwo file."""
+        rwo_files = [rwo for rwo in rwo_files if rwo.endswith('.rwo')]
         periodic_rate = ((1 + self.opt.tma) ** (1 / 365.25)) - 1
-        cash_flows = prod.loc[:, ['oil_prod',
-                                       'gas_prod',
-                                       'water_prod',
-                                       'water_inj']
-                                    ].mul(self.opt.prices).sum(axis=1).to_numpy()
-        time = prod["time"].to_numpy()
-        tax = 1 / np.power((1 + periodic_rate), time)
-        return np.sum(cash_flows * tax) * 1e-9
-
-    def base_run(self):
-        """
-        Run Imex.
-        """
-        logging.info('## Inicialized PyMEX... ')
-        self.model.temp_run.mkdir(parents=True, exist_ok=True)
-        self.run_imex()
-        self.run_report_results()
-        self.read_rwo_file()
-        self.clean_up()
+        col_name = ['time', 'Qo', 'Qgp', 'Qwp', 'Qwi', 'Empt_col']
+        rwo_names = []
+        queries = []
+        for rwo in rwo_files:
+            rwo_names.append(Path(rwo).name)
+            dframe = pl.scan_csv(rwo,
+                            separator='\t',
+                            skip_rows=6,
+                            truncate_ragged_lines=True,
+                            has_header=False,
+                            new_columns=col_name
+                            )
+            queries.append(
+                dframe
+                .with_columns(
+                    [
+                    (pl.col('Qo') * self.opt.prices[0]
+                    + pl.col('Qgp') * self.opt.prices[1]
+                    + pl.col('Qwp') * self.opt.prices[2]
+                    + pl.col('Qwi') * self.opt.prices[3]).alias('cf'),
+                    (1 / np.power((1 + periodic_rate),
+                                    pl.col('time'))).alias('tax'),
+                    ]
+                )
+                .with_columns(pv = pl.col('cf') * pl.col('tax') * 1e-9)
+                .select('pv').sum()
+            )
+        npvs = pl.concat(queries).collect()
+        npvs = npvs.with_columns(pl.Series(name='rwo', values=rwo_names))
+        return npvs.select(['rwo', 'pv'])
 
     def clean_up(self):
         """ Clean files from run path."""
         for file in self.model.basename:
             file.unlink(missing_ok=True)
 
-    def get_realization(self, content, model_number):
-        """Replace $N1 for model number in TPL dat."""
-        tpl = Template(content)
-        content = tpl.substitute(N1=model_number)
-        return content
-
     def _parse_include_files(self, datafile):
         """Parse simulation file for *INCLUDE files and return a list."""
         with open(datafile, "r", encoding='UTF-8') as file:
             lines = file.read()
-
         pattern = r'\n\s*\*?include\s*[\'|"](.*)[\'|"]'
         return re.findall(pattern, lines, flags=re.IGNORECASE)
-
-    @property
-    def numb_prod(self):
-        """Number of producer wells.
-
-        Returns:
-            int
-        """
-        return len(self.wells.prod)
-
-    @property
-    def numb_inj(self):
-        """Number of injector wells.
-
-        Returns:
-            int
-        """
-        return len(self.wells.inj)
-
-    @property
-    def num_wells(self):
-        """Total number of wells.
-
-        Returns:
-            int
-        """
-        return self.numb_prod + self.numb_inj
