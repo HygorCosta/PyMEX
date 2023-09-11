@@ -13,6 +13,7 @@
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import subprocess
 from typing import List
@@ -27,6 +28,14 @@ import yaml
 from .settings import Settings
 from .imex_tools import cmgfile
 
+
+def delete_files(filepaths):
+# process all file names
+    for filepath in filepaths:
+        # delete the file
+        os.remove(filepath)
+        # report progress
+        print(f'.deleted {filepath}')
 
 class PyMEX(Settings):
     """
@@ -299,10 +308,16 @@ class PyMEX(Settings):
         npvs = npvs.with_columns(pl.Series(name='rwo', values=rwo_names))
         return npvs.select(['rwo', 'pv'])
 
-    def clean_up(self):
+    def clean_up_temp_run(self):
         """ Clean files from run path."""
-        for file in self.model.basename:
-            file.unlink(missing_ok=True)
+        files = [self.model.temp_run / file for file in os.listdir(self.model.temp_run)]
+        nworkers = 6
+        chunksize = round(len(files) / nworkers)
+        with ThreadPoolExecutor(nworkers) as exe:
+            for i in range(0, len(files), chunksize):
+                filenames = files[i:(i + chunksize)]
+                _ = exe.submit(delete_files, filenames)
+        print('Temp folders is clean.')
 
     def _parse_include_files(self, datafile):
         """Parse simulation file for *INCLUDE files and return a list."""
