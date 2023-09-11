@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "res-pymex"
-version = "0.2.0"
+version = "0.2.1"
 description = ""
 authors = ["HYGOR VINICIUS COSTA SILVA <hygorvcosta@gmail.com>"]
 readme = "README.md"
