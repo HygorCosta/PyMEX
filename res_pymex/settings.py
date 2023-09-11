@@ -3,7 +3,7 @@ import math
 from pathlib import Path
 import numpy as np
 import yaml
-from .imex_tools import cmgfile
+from .util import cmgfile
 
 class Model():
     """Model information."""

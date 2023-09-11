@@ -18,7 +18,6 @@ from pathlib import Path
 import subprocess
 from typing import List
 from string import Template
-from collections import namedtuple
 import asyncio
 import aiofiles
 from dateutil.relativedelta import relativedelta
@@ -26,26 +25,17 @@ import numpy as np
 import polars as pl
 import yaml
 from .settings import Settings
-from .imex_tools import cmgfile
+from .util import cmgfile, delete_files, get_cmginfo
 
-
-def delete_files(filepaths):
-    """Delete files inside filepath folder"""
-    for filepath in filepaths:
-        # delete the file
-        os.remove(filepath)
-        # report progress
-        print(f'.deleted {filepath}')
 
 class PyMEX(Settings):
     """
     Manipulate the files give in.
     """
-    __cmginfo = namedtuple("cmginfo", "home_path sim_exe report_exe")
 
     def __init__(self, reservoir_config:yaml):
         super().__init__(reservoir_config)
-        self.cmginfo = self.get_cmginfo()
+        self.cmginfo = get_cmginfo()
         self._tpl_model = self._read_tpl_model()
         self._tpl_rwd = self._read_rwd_tpl()
         self.model.temp_run.mkdir(parents=True, exist_ok=True)
@@ -190,9 +180,9 @@ class PyMEX(Settings):
         await asyncio.gather(*tasks)
 
     async def write_multiple_dat_files(self,
-                                                basenames:List[str],
-                                                controls:np.ndarray,
-                                                realizations:List[int]):
+                                        basenames:List[str],
+                                        controls:np.ndarray,
+                                        realizations:List[int]):
         """Write one dat file for each control in controls list."""
         tasks = []
         for basename, control, realization in zip(basenames, controls, realizations):
@@ -225,19 +215,6 @@ class PyMEX(Settings):
         with open(self.model.tpl_report, 'r', encoding='utf-8') as tmpl:
             return Template(tmpl.read())
 
-    @classmethod
-    def get_cmginfo(cls):
-        """Get CMG Simulatior Information and Executables."""
-        try:
-            cmg_home = os.environ['CMG_HOME']
-            simulator = list(Path(cmg_home).rglob('mx*.exe'))
-            sim_exe = sorted(simulator)[-1]
-            report = list(Path(cmg_home).rglob('report*.exe'))
-            report_exe = sorted(report)[-1]
-            return cls.__cmginfo(cmg_home, sim_exe, report_exe)
-        except KeyError as error:
-            raise KeyError(
-                'Verifique se a variável de ambiente CMG_HOME existe!') from error
 
     def run_local_imex(self) -> int:
         """call IMEX + Results Report."""

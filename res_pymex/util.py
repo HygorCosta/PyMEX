@@ -11,6 +11,8 @@
 # Created: Jul 2019
 # Author: Hygor Costa
 # """
+import os
+from pathlib import Path
 from collections import namedtuple
 
 def cmgfile(basename):
@@ -39,3 +41,27 @@ def cmgfile(basename):
         basename.parent / f'{basename.stem}_SCHEDULE.inc',
     )
     return basename
+
+
+def delete_files(filepaths):
+    """Delete files inside filepath folder"""
+    for filepath in filepaths:
+        # delete the file
+        os.remove(filepath)
+        # report progress
+        print(f'.deleted {filepath}')
+
+
+def get_cmginfo():
+    """Get CMG Simulatior Information and Executables."""
+    try:
+        cmginfo = namedtuple("cmginfo", "home_path sim_exe report_exe")
+        cmg_home = os.environ['CMG_HOME']
+        simulator = list(Path(cmg_home).rglob('mx*.exe'))
+        sim_exe = sorted(simulator)[-1]
+        report = list(Path(cmg_home).rglob('report*.exe'))
+        report_exe = sorted(report)[-1]
+        return cmginfo(cmg_home, sim_exe, report_exe)
+    except KeyError as error:
+        raise KeyError(
+            'Verifique se a variável de ambiente CMG_HOME existe!') from error
