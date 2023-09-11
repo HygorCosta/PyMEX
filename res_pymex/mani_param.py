@@ -30,7 +30,7 @@ from .imex_tools import cmgfile
 
 
 def delete_files(filepaths):
-# process all file names
+    """Delete files inside filepath folder"""
     for filepath in filepaths:
         # delete the file
         os.remove(filepath)
@@ -308,9 +308,14 @@ class PyMEX(Settings):
         npvs = npvs.with_columns(pl.Series(name='rwo', values=rwo_names))
         return npvs.select(['rwo', 'pv'])
 
-    def clean_up_temp_run(self):
+    def clean_up_temp_run(self, ignore_files=None):
         """ Clean files from run path."""
-        files = [self.model.temp_run / file for file in os.listdir(self.model.temp_run)]
+        if ignore_files is None:
+            files = [self.model.temp_run / file for file in os.listdir(self.model.temp_run)]
+        else:
+            files = [self.model.temp_run / file for file
+                      in os.listdir(self.model.temp_run)
+                      if Path(file).stem not in ignore_files]
         nworkers = 6
         chunksize = round(len(files) / nworkers)
         with ThreadPoolExecutor(nworkers) as exe:

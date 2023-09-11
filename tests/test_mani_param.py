@@ -115,7 +115,7 @@ def test_run_olympus_copy_to(olymp: PyMEX):
 def test_write_multiple_async_files(olymp):
     controls = np.random.rand(50, 54)
     realizations = 25*[5, 44]
-    names = [f'ResOpt_{i:03d}' for i in range(1, 51)]
+    names = [f'ResOpt_{i:04d}' for i in range(1, 51)]
     asyncio.run(
         olymp.write_multiple_dat_and_rwd_files(
             names, controls, realizations
@@ -153,3 +153,9 @@ def test_clean_up(olymp):
     olymp.clean_up_temp_run()
     assert len(os.listdir(olymp.model.temp_run)) == 0
     assert os.path.isdir(olymp.model.temp_run)
+
+def test_clean_up_with_ignore(olymp):
+    """Remove all temp files."""
+    ignore_files = ['ResOpt_0004', 'ResOpt_0020', 'ResOpt_0049']
+    olymp.clean_up_temp_run(ignore_files)
+    assert len(os.listdir(olymp.model.temp_run)) == 3*2
