@@ -46,10 +46,7 @@ def cmgfile(basename):
 def delete_files(filepaths):
     """Delete files inside filepath folder"""
     for filepath in filepaths:
-        # delete the file
         os.remove(filepath)
-        # report progress
-        print(f'.deleted {filepath}')
 
 
 def get_cmginfo():
