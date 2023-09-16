@@ -47,6 +47,7 @@ def delete_files(filepaths):
     """Delete files inside filepath folder"""
     for filepath in filepaths:
         os.remove(filepath)
+    print('Temp_run folder is clean')
 
 
 def get_cmginfo():
