@@ -252,7 +252,6 @@ class PyMEX(Settings):
 
     def get_mult_npvs(self, rwo_files:List[str]):
         """Retorna uma lista de valores de npv, um para cada rwo file."""
-        rwo_files = [rwo for rwo in rwo_files if rwo.endswith('.rwo')]
         periodic_rate = ((1 + self.opt.tma) ** (1 / 365.25)) - 1
         col_name = ['time', 'Qo', 'Qgp', 'Qwp', 'Qwi', 'Empt_col']
         rwo_names = []
