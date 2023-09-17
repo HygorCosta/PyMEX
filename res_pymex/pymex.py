@@ -56,6 +56,16 @@ class PyMEX(Settings):
         return "\n".join(target)
 
     @property
+    def nprod(self):
+        """Number of well producers."""
+        return len(self.wells.prod)
+
+    @property
+    def ninj(self):
+        """Number of well injectors."""
+        return len(self.wells.inj)
+
+    @property
     def _wells_operate_bounds(self):
         return np.hstack((self.wells.prod_operate, self.wells.inj_operate))
 
