@@ -27,6 +27,7 @@ class Optimization():
     """Optimization information."""
     def __init__(self) -> None:
         self.numb_cic = None
+        self.realizations = None
         self.tma = None
         self.prices = []
         self.parasol = None
@@ -81,6 +82,7 @@ class Settings:
         new_opt = Optimization()
         data_yaml = data_yaml['optimization']
         new_opt.dates = data_yaml['dates']
+        new_opt.realizations = data_yaml['realizations']
         new_opt.numb_cic = math.ceil(12*new_opt.dates['conc']/new_opt.dates['step_control'])
         new_opt.tma = data_yaml['tma']
         new_opt.prices = data_yaml['prices']
