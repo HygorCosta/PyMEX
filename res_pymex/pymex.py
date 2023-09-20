@@ -267,7 +267,7 @@ class PyMEX(Settings):
         rwo_names = []
         queries = []
         for rwo in rwo_files:
-            rwo_names.append(Path(rwo).name)
+            rwo_names.append(Path(rwo).stem)
             dframe = pl.scan_csv(rwo,
                             separator='\t',
                             skip_rows=6,
@@ -291,8 +291,8 @@ class PyMEX(Settings):
                 .select('pv').sum()
             )
         npvs = pl.concat(queries).collect()
-        npvs = npvs.with_columns(pl.Series(name='rwo', values=rwo_names))
-        return npvs.select(['rwo', 'pv'])
+        npvs = npvs.with_columns(pl.Series(name='models', values=rwo_names))
+        return npvs.select(['models', 'pv'])
 
     def clean_up_temp_run(self, ignore_files=None):
         """ Clean files from run path."""
@@ -301,7 +301,7 @@ class PyMEX(Settings):
         else:
             files = [self.model.temp_run / file for file
                       in os.listdir(self.model.temp_run)
-                      if Path(file).stem not in ignore_files]
+                      if file not in ignore_files]
         nworkers = 6
         chunksize = round(len(files) / nworkers)
         with ThreadPoolExecutor(nworkers) as exe:
