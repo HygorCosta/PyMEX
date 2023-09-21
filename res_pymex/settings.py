@@ -52,7 +52,8 @@ class Settings:
         new_model = Model()
         data_yaml = data_yaml['model']
         new_model.tpl = Path(data_yaml['dat_tpl'])
-        new_model.temp_run = data_yaml['temp_run']
+        new_model.temp_run = Path(data_yaml['temp_run'])
+        new_model.temp_run.mkdir(exist_ok=True)
         new_model.basename = cmgfile(new_model.temp_run / new_model.tpl.name)
         new_model.tpl_report = Path(data_yaml['report_tpl'])
         return new_model
