@@ -112,7 +112,8 @@ class PyMEX(Settings):
         return [min_control + delta_control * control
                         for control in controls_per_cycle]
 
-    def _write_scheduling(self) -> str:
+    def get_date_steps(self) -> list:
+        """Get the all TIME steps sent to the simulator."""
         start = self.opt.dates['start']
         end = start + relativedelta(years=self.opt.dates['conc'])
         date_range = range(self.opt.dates['write_freq'],
@@ -121,15 +122,25 @@ class PyMEX(Settings):
         date_list = [start + relativedelta(months=x) for x in date_range]
         if end not in date_list:
             date_list.append(end)
+        return date_list
+
+    def get_control_times(self) -> list:
+        """Get the discrete well control times."""
         control_range = range(0,
                               12*self.opt.dates['conc'],
                               self.opt.dates['step_control'])
-        control_list = [start + relativedelta(months=x) for x in control_range]
+        return [self.opt.dates['start'] +
+                 relativedelta(months=x) for x in control_range]
+
+    def _write_scheduling(self) -> str:
         controls = iter([self._control_alter_strings(control) for control in self._controls])
         schedule = []
-        bool_control = np.isin(date_list, control_list)
+        date_list = self.get_date_steps()
+        bool_control = np.isin(date_list, self.get_control_times())
         schedule.append(next(controls))
-        schedule.append(f'*DATE {start.strftime("%Y %m %d")}.1\n')
+        schedule.append(
+            f"*DATE {self.opt.dates['start'].strftime('%Y %m %d')}.1\n"
+        )
         for date, is_control in zip(date_list, bool_control):
             schedule.append(f'*DATE {date.strftime("%Y %m %d")}')
             if is_control:
