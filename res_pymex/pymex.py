@@ -88,7 +88,7 @@ class PyMEX(Settings):
         """Get scaled controls from nominal ones."""
         if np.any(controls > 1):
             raise AttributeError('Controls out of range.')
-        self._controls = self._get_scaled_controls(controls)
+        self._controls = self.get_scaled_controls(controls)
 
     @property
     def realization(self):
@@ -104,7 +104,8 @@ class PyMEX(Settings):
         """Get production pandas dataset"""
         return self._production
 
-    def _get_scaled_controls(self, controls):
+    def get_scaled_controls(self, controls):
+        """Return the unnormalized well control values."""
         controls_per_cycle = np.split(controls, self.opt.numb_cic)
         delta_control = self._wells_operate_bounds[0, :] - self._wells_operate_bounds[1,:]
         min_control = self._wells_operate_bounds[1,:]
