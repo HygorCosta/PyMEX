@@ -12,7 +12,6 @@
 """
 import os
 import re
-import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import subprocess
