@@ -31,9 +31,8 @@ class Optimization():
         self.realizations = None
         self.tma = None
         self.prices = []
-        self.parasol = None
         self.dates = []
-        self.clean_files = None
+        self.max_sim = None
         self.sao = []
 
 
@@ -90,7 +89,6 @@ class Settings:
         new_opt.numb_cic = math.ceil(12*new_opt.dates['conc']/new_opt.dates['step_control'])
         new_opt.tma = data_yaml['tma']
         new_opt.prices = data_yaml['prices']
-        new_opt.parasol = data_yaml['num_cores_parasol']
-        new_opt.clean_files = data_yaml['clean_up_results']
+        new_opt.max_sim = data_yaml['max_sim']
         new_opt.sao = data_yaml['sao']
         return new_opt

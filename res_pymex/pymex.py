@@ -237,21 +237,6 @@ class PyMEX(Settings):
         with open(self.model.tpl_report, 'r', encoding='utf-8') as tmpl:
             return Template(tmpl.read())
 
-
-    def run_local_imex(self) -> int:
-        """call IMEX + Results Report."""
-        # self.create_well_operation()
-        try:
-            with open(self.model.basename.log, 'w', encoding='UTF-8') as log:
-                sim_command = [self.cmginfo.sim_exe, "-f",
-                                self.model.basename.dat.absolute(), "-wait", "-dd"]
-                if self.opt.parasol > 1:
-                    sim_command += ["-parasol", str(self.opt.parasol), "-doms"]
-                return subprocess.run(sim_command, stdout=log, check=True)
-        except subprocess.CalledProcessError as error:
-            sys.exit(
-                f"Error - Não foi possível executar o IMEX, verificar: {error}")
-
     def run_local_report_results(self):
         """Get production for results."""
         try:
@@ -272,8 +257,16 @@ class PyMEX(Settings):
             print(f"Report não pode ser executador, verificar: {error}")
             return 1
 
-    def get_mult_npvs(self, rwo_files:List[str]):
-        """Retorna uma lista de valores de npv, um para cada rwo file."""
+    def get_mult_npvs(self, rwo_files:List[str]) -> pl.DataFrame:
+        """Retorna um Dataframe do polars com os valores do VPL e os arquivos
+        rwo usados.
+
+        Args:
+            rwo_files (List[str]): arquivos de saida do report
+
+        Returns:
+            pl.Dataframe: dataframe do polars
+        """
         periodic_rate = ((1 + self.opt.tma) ** (1 / 365.25)) - 1
         col_name = ['time', 'Qo', 'Qgp', 'Qwp', 'Qwi', 'Empt_col']
         rwo_names = []
@@ -303,10 +296,8 @@ class PyMEX(Settings):
                     .with_columns(pv = pl.col('cf') * pl.col('tax') * 1e-9)
                     .select('pv').sum()
                 )
-            except pl.NoDataError as der:
+            except (pl.NoDataError, pl.ComputeError) as der:
                 print(f'Falha no arquivo {Path(rwo)}: {der}')
-            except pl.ComputeError as cer:
-                print(cer)
         npvs = pl.concat(queries).collect()
         npvs = npvs.with_columns(pl.Series(name='models', values=rwo_names))
         return npvs.select(['models', 'pv'])
