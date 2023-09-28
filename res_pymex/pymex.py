@@ -279,29 +279,34 @@ class PyMEX(Settings):
         rwo_names = []
         queries = []
         for rwo in rwo_files:
-            rwo_names.append(Path(rwo).stem)
-            dframe = pl.scan_csv(rwo,
-                            separator='\t',
-                            skip_rows=6,
-                            truncate_ragged_lines=True,
-                            has_header=False,
-                            new_columns=col_name
-                            )
-            queries.append(
-                dframe
-                .with_columns(
-                    [
-                    (pl.col('Qo') * self.opt.prices[0]
-                    + pl.col('Qgp') * self.opt.prices[1]
-                    + pl.col('Qwp') * self.opt.prices[2]
-                    + pl.col('Qwi') * self.opt.prices[3]).alias('cf'),
-                    (1 / np.power((1 + periodic_rate),
-                                    pl.col('time'))).alias('tax'),
-                    ]
+            try:
+                rwo_names.append(Path(rwo).stem)
+                dframe = pl.scan_csv(rwo,
+                                separator='\t',
+                                skip_rows=6,
+                                truncate_ragged_lines=True,
+                                has_header=False,
+                                new_columns=col_name
                 )
-                .with_columns(pv = pl.col('cf') * pl.col('tax') * 1e-9)
-                .select('pv').sum()
-            )
+                queries.append(
+                    dframe
+                    .with_columns(
+                        [
+                        (pl.col('Qo') * self.opt.prices[0]
+                        + pl.col('Qgp') * self.opt.prices[1]
+                        + pl.col('Qwp') * self.opt.prices[2]
+                        + pl.col('Qwi') * self.opt.prices[3]).alias('cf'),
+                        (1 / np.power((1 + periodic_rate),
+                                        pl.col('time'))).alias('tax'),
+                        ]
+                    )
+                    .with_columns(pv = pl.col('cf') * pl.col('tax') * 1e-9)
+                    .select('pv').sum()
+                )
+            except pl.NoDataError as der:
+                print(f'Falha no arquivo {Path(rwo)}: {der}')
+            except pl.ComputeError as cer:
+                print(cer)
         npvs = pl.concat(queries).collect()
         npvs = npvs.with_columns(pl.Series(name='models', values=rwo_names))
         return npvs.select(['models', 'pv'])

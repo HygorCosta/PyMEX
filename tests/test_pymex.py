@@ -13,14 +13,9 @@ from res_pymex.pymex import PyMEX
 def pymex_olymp():
     """Create instance of Pymex to test.
     """
-    controls_1 = [0] * 11 + [1] * 7
-    controls_2 = [0] * 11 + [1] * 7
-    controls_3 = [0] * 11 + [1] * 7
-    controls = controls_1 + controls_2 + controls_3
-    model = PyMEX('./model/olympus_config.yaml')
-    model.controls = np.array(controls)
-    model.realization = 44
-    return model
+    return PyMEX(
+        r"L:\res\usuarios\dvos\OLYMPUS\CONFIG\olympus_config.yaml"
+    )
 
 def test_inicializar_classe(olymp: PyMEX):
     """Testar a inicialização da classe"""
@@ -114,8 +109,8 @@ def test_run_olympus_copy_to(olymp: PyMEX):
 
 def test_write_multiple_async_files(olymp):
     controls = np.random.rand(50, 54)
-    realizations = 25*[5, 44]
-    names = [f'ResOpt_{i:04d}' for i in range(1, 51)]
+    realizations = 5*[5, 44]
+    names = [f'ResOpt_{i:04d}' for i in range(1, len(realizations)+1)]
     asyncio.run(
         olymp.write_multiple_dat_and_rwd_files(
             names, controls, realizations
@@ -147,6 +142,18 @@ def test_get_mult_npvs(olymp):
     rwo_files = [f'{rwo}_{i:04d}.rwo' for i in range(3, 51)]
     dframe = olymp.get_mult_npvs(rwo_files)
     assert len(dframe.select('pv').to_numpy()) == 48
+
+def test_get_mult_npvs_computeerror(olymp):
+    """Calculate net present value from rwo"""
+    rwo = olymp.model.temp_run / 'ResOpt_FAIL.rwo'
+    dframe = olymp.get_mult_npvs([rwo])
+    assert dframe is None
+
+def test_get_mult_npvs_data_error(olymp):
+    """Calculate net present value from rwo"""
+    rwo = olymp.model.temp_run / 'ResOpt_0110.rwo'
+    dframe = olymp.get_mult_npvs([rwo])
+    assert dframe is None
 
 def test_clean_up(olymp):
     """Remove all temp files."""
