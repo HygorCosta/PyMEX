@@ -118,6 +118,17 @@ def test_write_multiple_async_files(olymp):
     )
     assert 1
 
+def test_write_multiple_rwd(olymp:PyMEX):
+    """Write multiple files"""
+    path = os.path.abspath(r"L:\res\usuarios\dvos\OLYMPUS\REF")
+    sr3_ref = [
+        entry.path for entry in os.scandir(path) if entry.is_file()
+    ]
+    asyncio.run(olymp.write_multiple_rwd_files(sr3_ref))
+    nfiles = len(os.listdir(r"L:\res\usuarios\dvos\OLYMPUS\REF"))
+    assert nfiles == 6
+
+
 def test_results_report(olymp):
     """Async results report execution"""
     base = olymp.model.temp_run / 'ResOpt'

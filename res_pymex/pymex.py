@@ -219,15 +219,16 @@ class PyMEX(Settings):
             )
         await asyncio.gather(*tasks)
 
-    async def write_multiple_rwd_files(self, basenames:List[str]):
+    async def write_multiple_rwd_files(self, sr3_files:List[str]):
         """Write one rwd file for each control in list."""
         tasks = []
-        for basename in zip(basenames):
-            self.basename = basename
-            rwd_content = self._tpl_rwd.substitute(SR3FILE=self.model.basename.sr3.name)
+        for sr3 in sr3_files:
+            sr3 = Path(sr3)
+            rwd_content = self._tpl_rwd.substitute(SR3FILE=sr3.name)
+            rwd_file = sr3.with_suffix('.rwd')
             tasks.append(
                 asyncio.ensure_future(
-                self._write_dat_async(self.model.basename.rwd, rwd_content)
+                self._write_dat_async(rwd_file, rwd_content)
                 )
             )
         await asyncio.gather(*tasks)
