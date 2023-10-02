@@ -11,6 +11,7 @@ class Model():
         self.tpl = ""
         self.basename = ""
         self.temp_run = ""
+        self.config = ""
         self.results = ""
         self.tpl_report = ""
 
@@ -54,6 +55,8 @@ class Settings:
         new_model.tpl = Path(data_yaml['dat_tpl'])
         new_model.temp_run = Path(data_yaml['temp_run'])
         new_model.temp_run.mkdir(exist_ok=True)
+        new_model.config = Path(data_yaml['config'])
+        new_model.config.mkdir(exist_ok=True)
         new_model.results = Path(data_yaml['results'])
         new_model.results.mkdir(exist_ok=True)
         new_model.basename = cmgfile(new_model.temp_run / new_model.tpl.name)

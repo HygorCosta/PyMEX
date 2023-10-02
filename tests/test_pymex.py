@@ -139,9 +139,9 @@ def test_assync_results_report(olymp):
 def test_get_mult_npvs(olymp):
     """Calculate net present value from rwo"""
     rwo = olymp.model.temp_run / 'ResOpt'
-    rwo_files = [f'{rwo}_{i:04d}.rwo' for i in range(3, 51)]
+    rwo_files = [f'{rwo}_{i:04d}.rwo' for i in range(1, 101)]
     dframe = olymp.get_mult_npvs(rwo_files)
-    assert len(dframe.select('pv').to_numpy()) == 48
+    assert len(dframe.select('pv').to_numpy()) == 100
 
 def test_get_mult_npvs_computeerror(olymp):
     """Calculate net present value from rwo"""

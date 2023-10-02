@@ -271,8 +271,8 @@ class PyMEX(Settings):
         rwo_names = []
         queries = []
         for rwo in rwo_files:
+            rwo_names.append(Path(rwo).stem)
             try:
-                rwo_names.append(Path(rwo).stem)
                 dframe = pl.scan_csv(rwo,
                                 separator='\t',
                                 skip_rows=6,
@@ -297,9 +297,14 @@ class PyMEX(Settings):
                 )
             except (pl.NoDataError, pl.ComputeError) as der:
                 print(f'Falha no arquivo {Path(rwo)}: {der}')
+                queries.append(
+                    pl.LazyFrame(
+                        {'npv': 0.0},
+                    )
+                )
         npvs = pl.concat(queries).collect()
         npvs = npvs.with_columns(pl.Series(name='models', values=rwo_names))
-        return npvs.select(['models', 'pv'])
+        return npvs.select(['models', 'npv'])
 
     def clean_up_temp_run(self, ignore_files=None):
         """ Clean files from run path."""
